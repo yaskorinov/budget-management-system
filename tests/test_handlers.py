@@ -341,6 +341,53 @@ async def main():
     assert not any("login=" in text for text in out), "ссылка утекла через /start web"
     print("### диплинк /start web: ссылка только в личке ✓")
 
+    # ---- первый запуск: у человека ещё нет ни одного бюджета ----
+    NEWBIE = TgUser(id=777, is_bot=False, first_name="Новичок")
+    NEWBIE_CHAT = Chat(id=777, type="private")
+
+    out = await send("/start", NEWBIE, NEWBIE_CHAT)
+    show("первый /start", out)
+    assert any("нет общего бюджета" in text for text in out), out
+    buttons = [b["text"] for row in
+               session.find("SendRichMessage")[-1]["reply_markup"]["inline_keyboard"]
+               for b in row]
+    assert "➕ Создать бюджет" in buttons, buttons
+    assert "⬅️ В меню" not in buttons, "меню без бюджета вести некуда"
+
+    # «В меню» объясняет, что делать, а не молчит
+    session.reset()
+    cb = CallbackQuery(id="n1", from_user=NEWBIE, chat_instance="x", data="m:home",
+                       message=msg("нет бюджета", NEWBIE, NEWBIE_CHAT)).as_(bot)
+    await dp.feed_update(bot, upd(callback_query=cb))
+    answer = session.find("AnswerCallbackQuery")[-1]
+    assert answer.get("text") == "Сначала создайте бюджет", answer
+    assert answer.get("show_alert"), "подсказку легко не заметить без alert"
+    print("\n### «В меню» без бюджета: подсказка «Сначала создайте бюджет» ✓")
+
+    # кнопка «Создать бюджет» спрашивает название
+    session.reset()
+    cb = CallbackQuery(id="n2", from_user=NEWBIE, chat_instance="x", data="m:newgroup",
+                       message=msg("нет бюджета", NEWBIE, NEWBIE_CHAT)).as_(bot)
+    await dp.feed_update(bot, upd(callback_query=cb))
+    assert_markup_ok("m:newgroup")
+    asked = session.find("EditMessageText")[-1]["rich_message"]["markdown"]
+    assert "Как его назвать" in asked, asked
+    show("кнопка «Создать бюджет»", session.texts())
+
+    # название сообщением — бюджет создан, дальше сразу меню
+    out = await send("Квартира на Лесной", NEWBIE, NEWBIE_CHAT)
+    show("название бюджета", out)
+    assert any("создан" in text for text in out), out
+    assert any("Осталось в фонде" in text for text in out), "после создания показываем меню"
+
+    # /newgroup без аргументов тоже спрашивает название, а не показывает синтаксис
+    out = await send("/newgroup", NEWBIE, NEWBIE_CHAT)
+    assert any("Как его назвать" in text for text in out), out
+    out = await send("Дача", NEWBIE, NEWBIE_CHAT)
+    assert any("Дача" in text and "создан" in text for text in out), out
+    print("### /newgroup без аргументов спрашивает название ✓")
+
+
 
 
 

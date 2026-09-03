@@ -111,7 +111,7 @@ async def menu_stats(
 ) -> None:
     group = await service.resolve_active_group(session, user)
     if group is None:
-        await edit_card(bot, callback, NO_GROUP_HINT, keyboards.back_home_kb())
+        await edit_card(bot, callback, NO_GROUP_HINT, keyboards.no_group_kb())
         await callback.answer()
         return
     await callback.answer()

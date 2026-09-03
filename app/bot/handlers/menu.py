@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards, texts
 from app.bot.callbacks import GroupCB, MenuCB
+from app.bot.states import NewGroup
 from app.bot.common import (
     GROUP_CHATS,
     NO_GROUP_HINT,
@@ -38,7 +39,7 @@ async def render_home(
     такую клавиатуру целиком (BUTTON_TYPE_INVALID), и сообщение не отправляется."""
     group = await service.resolve_active_group(session, user)
     if group is None:
-        return NO_GROUP_HINT, keyboards.back_home_kb()
+        return NO_GROUP_HINT, keyboards.no_group_kb()
 
     data = await service.summary(session, group=group)
     groups = await service.user_groups(session, user.id)
@@ -119,32 +120,47 @@ async def help_command(message: Message, bot: Bot) -> None:
     await answer_rich(message, texts.help_text(me.username))
 
 
+def group_created_text(group) -> object:
+    """Одно сообщение об успехе — и для команды, и для кнопки."""
+    return texts.blocks(
+        texts.heading(2, texts.join("✅ Бюджет «", group.title, "» создан")),
+        texts.bullets(
+            texts.join(
+                "Чтобы подключить остальных, добавьте бота в общий чат и отправьте там ",
+                texts.cmd("/join"),
+            ),
+            "Бюджет уже выбран активным",
+        ),
+    )
+
+
 @router.message(Command("newgroup"), F.chat.type == "private")
 async def new_group(
-    message: Message, command: CommandObject, session: AsyncSession, user: User
+    message: Message,
+    command: CommandObject,
+    session: AsyncSession,
+    user: User,
+    state: FSMContext,
 ) -> None:
     title = (command.args or "").strip()
     if not title:
-        await answer_rich(message, 
-            texts.join("Укажите название: ", texts.cmd("/newgroup Квартира на Лесной"))
+        # Без аргумента спрашиваем название, а не показываем синтаксис команды.
+        await state.set_state(NewGroup.title)
+        await state.set_data({})
+        await answer_rich(
+            message,
+            texts.blocks(
+                texts.heading(2, "➕ Новый бюджет"),
+                texts.join("Как его назвать? Напишите название сообщением."),
+                texts.italic("Например: Квартира на Лесной"),
+            ),
+            reply_markup=keyboards.cancel_kb(),
         )
         return
+
     group = await service.create_group(session, title=title, owner=user)
     await service.set_active_group(session, user, group.id)
-    await answer_rich(message, 
-        texts.lines(
-            texts.join("✅ ", texts.bold("Бюджет «", group.title, "» создан")),
-            texts.quote(
-                texts.lines(
-                    texts.join(
-                        "Чтобы подключить остальных, добавьте бота в общий чат ",
-                        "и отправьте там ", texts.cmd("/join"), ".",
-                    ),
-                    texts.join("Бюджет уже выбран активным."),
-                )
-            ),
-        )
-    )
+    await answer_rich(message, group_created_text(group))
 
 
 @router.message(Command("groups"), F.chat.type == "private")
@@ -267,6 +283,12 @@ async def go_home(
     await state.clear()
     text, markup = await render_home(session, user, private=is_private(callback))
     await edit_card(bot, callback, text, markup)
+
+    # Без бюджета меню открывать некуда — экран остаётся прежним, поэтому
+    # объясняем это словами, иначе кнопка выглядит сломанной.
+    if not await service.user_groups(session, user.id):
+        await callback.answer("Сначала создайте бюджет", show_alert=True)
+        return
     await callback.answer()
 
 
@@ -306,10 +328,52 @@ async def close_message(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
+@router.callback_query(MenuCB.filter(F.action == "newgroup"))
+async def ask_group_title(
+    callback: CallbackQuery, state: FSMContext, bot: Bot
+) -> None:
+    await state.set_state(NewGroup.title)
+    await state.set_data({})
+    await edit_card(
+        bot,
+        callback,
+        texts.blocks(
+            texts.heading(2, "➕ Новый бюджет"),
+            texts.join("Как его назвать? Напишите название сообщением."),
+            texts.italic("Например: Квартира на Лесной"),
+        ),
+        keyboards.cancel_kb(),
+    )
+    await callback.answer()
+
+
+@router.message(NewGroup.title, F.chat.type == "private", F.text)
+async def create_group_by_title(
+    message: Message, session: AsyncSession, user: User, state: FSMContext
+) -> None:
+    title = (message.text or "").strip()
+    if not title:
+        await answer_rich(message, texts.join("Название не может быть пустым."))
+        return
+
+    await state.clear()
+    group = await service.create_group(session, title=title, owner=user)
+    await service.set_active_group(session, user, group.id)
+    await answer_rich(message, group_created_text(group))
+
+    text, markup = await render_home(session, user)
+    await answer_rich(message, text, reply_markup=markup)
+
+
 @router.callback_query(MenuCB.filter(F.action == "help"))
-async def menu_help(callback: CallbackQuery, bot: Bot) -> None:
+async def menu_help(
+    callback: CallbackQuery, session: AsyncSession, user: User, bot: Bot
+) -> None:
     me = await bot.me()
-    await edit_card(bot, callback, texts.help_text(me.username), keyboards.back_home_kb())
+    # Пока бюджета нет, «В меню» вести некуда — оставляем кнопку создания.
+    has_groups = bool(await service.user_groups(session, user.id))
+    markup = keyboards.back_home_kb() if has_groups else keyboards.no_group_kb()
+    await edit_card(bot, callback, texts.help_text(me.username), markup)
     await callback.answer()
 
 
@@ -319,7 +383,7 @@ async def menu_group(
 ) -> None:
     groups = await service.user_groups(session, user.id)
     if not groups:
-        await edit_card(bot, callback, NO_GROUP_HINT, keyboards.back_home_kb())
+        await edit_card(bot, callback, NO_GROUP_HINT, keyboards.no_group_kb())
         await callback.answer()
         return
 

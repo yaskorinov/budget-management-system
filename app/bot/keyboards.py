@@ -45,6 +45,15 @@ def back_home_kb() -> InlineKeyboardMarkup:
     )
 
 
+def no_group_kb() -> InlineKeyboardMarkup:
+    """Экран без бюджета: дальше идти некуда, пока его не создали."""
+    builder = InlineKeyboardBuilder()
+    builder.button(text="➕ Создать бюджет", callback_data=MenuCB(action="newgroup"))
+    builder.button(text="❓ Как это работает", callback_data=MenuCB(action="help"))
+    builder.adjust(1)
+    return builder.as_markup()
+
+
 def draft_kb(draft_id: str, *, with_category: bool = True) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="✅ Записать", callback_data=DraftCB(action="ok", draft_id=draft_id))

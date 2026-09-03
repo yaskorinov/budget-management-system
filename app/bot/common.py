@@ -48,13 +48,11 @@ async def resolve_group(
 NO_GROUP_HINT = texts.blocks(
     texts.heading(2, "💼 У вас пока нет общего бюджета"),
     texts.bullets(
+        texts.join("Нажмите ", texts.bold("Создать бюджет"), " ниже — и позовите остальных"),
         texts.join(
-            "Добавьте бота в общий чат и отправьте там ",
+            "Либо добавьте бота в общий чат и отправьте там ",
             texts.cmd("/join"),
             " — бюджет создастся сам",
-        ),
-        texts.join(
-            "Либо заведите его прямо здесь: ", texts.cmd("/newgroup Название")
         ),
     ),
 )
