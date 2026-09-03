@@ -11,6 +11,7 @@ class MockSession(BaseSession):
     def __init__(self):
         super().__init__()
         self.calls: list[tuple[str, dict]] = []
+        self.fail_on: set[str] = set()  # разовая имитация отказа Telegram
         self._msg_id = 1000
 
     async def close(self):
@@ -23,6 +24,14 @@ class MockSession(BaseSession):
         name = type(method).__name__
         data = method.model_dump(exclude_none=True)
         self.calls.append((name, data))
+
+        if name in self.fail_on:
+            from aiogram.exceptions import TelegramBadRequest
+
+            self.fail_on.discard(name)
+            raise TelegramBadRequest(
+                method=method, message="Bad Request: BUTTON_TYPE_INVALID"
+            )
 
         if name == "GetMe":
             return BOT_USER
@@ -60,3 +69,4 @@ class MockSession(BaseSession):
 
     def reset(self):
         self.calls.clear()
+        self.fail_on.clear()

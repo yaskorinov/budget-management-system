@@ -3,11 +3,18 @@ from __future__ import annotations
 
 import logging
 
+from contextlib import suppress
+
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import BotCommand, BotCommandScopeAllGroupChats, BotCommandScopeAllPrivateChats
+from aiogram.types import (
+    BotCommand,
+    BotCommandScopeAllGroupChats,
+    BotCommandScopeAllPrivateChats,
+    ErrorEvent,
+)
 
 from app.bot.handlers import entry, fallback, inline, menu, operations, stats
 from app.bot.middlewares import ContextMiddleware
@@ -49,6 +56,18 @@ def create_bot() -> Bot:
     )
 
 
+async def on_error(event: ErrorEvent) -> bool:
+    """Без этого упавший хендлер оставляет кнопку с вечным «часиком»:
+    Telegram ждёт answerCallbackQuery, а его никто не отправил."""
+    log.exception("Ошибка при обработке апдейта: %s", event.exception)
+
+    callback = event.update.callback_query
+    if callback is not None:
+        with suppress(Exception):
+            await callback.answer("Не получилось — попробуйте ещё раз", show_alert=True)
+    return True
+
+
 def create_dispatcher() -> Dispatcher:
     dispatcher = Dispatcher(storage=MemoryStorage())
     dispatcher.update.outer_middleware(ContextMiddleware())
@@ -60,6 +79,8 @@ def create_dispatcher() -> Dispatcher:
     dispatcher.include_router(stats.router)
     dispatcher.include_router(inline.router)
     dispatcher.include_router(fallback.router)
+
+    dispatcher.errors.register(on_error)
     return dispatcher
 
 

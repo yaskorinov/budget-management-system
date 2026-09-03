@@ -1,6 +1,8 @@
 """Общие помощники хендлеров."""
 from __future__ import annotations
 
+from contextlib import suppress
+
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
@@ -43,6 +45,11 @@ NO_GROUP_HINT = (
 )
 
 
+def is_private(callback: CallbackQuery) -> bool:
+    """Личный чат с ботом? Сообщения из inline-режима приватными не считаются."""
+    return bool(callback.message and callback.message.chat.type == "private")
+
+
 async def edit_card(
     bot: Bot,
     callback: CallbackQuery,
@@ -62,6 +69,14 @@ async def edit_card(
     except TelegramBadRequest as exc:
         if "message is not modified" not in str(exc):
             raise
+
+
+async def drop_prompt(bot: Bot, data: dict) -> None:
+    """Убирает приглашение «напишите сумму», когда ответ получен."""
+    chat_id, message_id = data.get("prompt_chat_id"), data.get("prompt_id")
+    if chat_id and message_id:
+        with suppress(TelegramBadRequest):
+            await bot.delete_message(chat_id, message_id)
 
 
 async def show_operation_card(

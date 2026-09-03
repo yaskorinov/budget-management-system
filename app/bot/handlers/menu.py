@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
@@ -9,7 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards, texts
 from app.bot.callbacks import GroupCB, MenuCB
-from app.bot.common import GROUP_CHATS, NO_GROUP_HINT, edit_card, resolve_group, web_app_url
+from app.bot.common import (
+    GROUP_CHATS,
+    NO_GROUP_HINT,
+    edit_card,
+    is_private,
+    resolve_group,
+    web_app_url,
+)
 from app.config import settings
 from app.core import service
 from app.db.models import User
@@ -17,7 +25,11 @@ from app.db.models import User
 router = Router(name="menu")
 
 
-async def render_home(session: AsyncSession, user: User) -> tuple[str, object]:
+async def render_home(
+    session: AsyncSession, user: User, *, private: bool = True
+) -> tuple[str, object]:
+    """Главный экран. Вне лички кнопка web_app недопустима — Telegram отвергает
+    такую клавиатуру целиком (BUTTON_TYPE_INVALID), и сообщение не отправляется."""
     group = await service.resolve_active_group(session, user)
     if group is None:
         return NO_GROUP_HINT, keyboards.back_home_kb()
@@ -26,7 +38,7 @@ async def render_home(session: AsyncSession, user: User) -> tuple[str, object]:
     groups = await service.user_groups(session, user.id)
     hint = "\n\n<i>Сменить группу: /groups</i>" if len(groups) > 1 else ""
     text = f"👋 <b>{texts.esc(user.short_name)}</b>\n\n{texts.summary_text(data)}{hint}"
-    return text, keyboards.main_menu(web_app_url=web_app_url())
+    return text, keyboards.main_menu(web_app_url=web_app_url() if private else None)
 
 
 @router.message(CommandStart(), F.chat.type.in_(GROUP_CHATS))
@@ -170,9 +182,31 @@ async def go_home(
     callback: CallbackQuery, session: AsyncSession, user: User, state: FSMContext, bot: Bot
 ) -> None:
     await state.clear()
-    text, markup = await render_home(session, user)
+    text, markup = await render_home(session, user, private=is_private(callback))
     await edit_card(bot, callback, text, markup)
     await callback.answer()
+
+
+@router.callback_query(MenuCB.filter(F.action == "cancel"))
+async def cancel_action(
+    callback: CallbackQuery, session: AsyncSession, user: User, state: FSMContext, bot: Bot
+) -> None:
+    """Отмена ввода: в личке возвращаемся в меню, в группе убираем сообщение."""
+    await state.clear()
+
+    if not is_private(callback):
+        try:
+            if callback.message:
+                await callback.message.delete()
+        except TelegramBadRequest:
+            # Нет прав на удаление или сообщение старше 48 часов — гасим текстом.
+            await edit_card(bot, callback, "✖️ Отменено.", None)
+        await callback.answer("Отменено")
+        return
+
+    text, markup = await render_home(session, user, private=True)
+    await edit_card(bot, callback, text, markup)
+    await callback.answer("Отменено")
 
 
 @router.callback_query(MenuCB.filter(F.action == "help"))

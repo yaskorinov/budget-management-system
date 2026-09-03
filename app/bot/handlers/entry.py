@@ -6,12 +6,20 @@ import re
 from aiogram import Bot, F, Router
 from aiogram.filters import Command, CommandObject
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.fsm.state import State
+from aiogram.types import CallbackQuery, ForceReply, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards, texts
 from app.bot.callbacks import MenuCB
-from app.bot.common import GROUP_CHATS, NO_GROUP_HINT, edit_card, resolve_group
+from app.bot.common import (
+    GROUP_CHATS,
+    NO_GROUP_HINT,
+    drop_prompt,
+    edit_card,
+    resolve_group,
+)
+from app.bot.filters import PromptReply
 from app.bot.states import AddContribution, AddPurchase
 from app.core import service
 from app.core.classifier import parse_purchase
@@ -32,6 +40,33 @@ PURCHASE_RE = re.compile(
 
 def source_for(message: Message) -> str:
     return "group" if message.chat.type in GROUP_CHATS else "dm"
+
+
+async def ask_for_input(
+    message: Message,
+    state: FSMContext,
+    next_state: State,
+    *,
+    text: str,
+    placeholder: str,
+) -> None:
+    """Задаёт вопрос и запоминает своё сообщение.
+
+    В группе спрашиваем через ForceReply ответом на команду: при включённом
+    privacy mode бот видит только команды и ответы на свои сообщения, поэтому
+    обычную реплику в чате он бы просто не получил.
+    """
+    if message.chat.type == "private":
+        prompt = await message.answer(text, reply_markup=keyboards.cancel_kb())
+    else:
+        prompt = await message.reply(
+            f"{text}\n\n<i>Ответьте на это сообщение — или пришлите всё одной "
+            f"строкой, например <code>{placeholder}</code>.</i>",
+            reply_markup=ForceReply(selective=True, input_field_placeholder=placeholder),
+        )
+
+    await state.set_state(next_state)
+    await state.set_data({"prompt_id": prompt.message_id, "prompt_chat_id": prompt.chat.id})
 
 
 async def record_contribution(
@@ -113,10 +148,12 @@ async def add_command(
 
     amount, _ = parse_amount(command.args or "")
     if amount is None:
-        await state.set_state(AddContribution.amount)
-        await message.answer(
-            "Сколько внести в общий фонд? Напишите сумму, например <code>5000</code>.",
-            reply_markup=keyboards.cancel_kb(),
+        await ask_for_input(
+            message,
+            state,
+            AddContribution.amount,
+            text="💰 Сколько внести в общий фонд?",
+            placeholder="/add 5000",
         )
         return
     await record_contribution(message, session, user, group, amount, source_for(message))
@@ -140,10 +177,12 @@ async def buy_command(
 
     text = (command.args or "").strip()
     if not text:
-        await state.set_state(AddPurchase.text)
-        await message.answer(
-            "Что купили и на сколько? Например: <code>молоко хлеб яйца 850</code>",
-            reply_markup=keyboards.cancel_kb(),
+        await ask_for_input(
+            message,
+            state,
+            AddPurchase.text,
+            text="🛒 Что купили и на сколько?",
+            placeholder="/buy молоко хлеб 850",
         )
         return
     await record_purchase(message, session, user, group, text, source_for(message), bot)
@@ -157,6 +196,7 @@ async def buy_command(
 @router.callback_query(MenuCB.filter(F.action == "add"))
 async def menu_add(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
     await state.set_state(AddContribution.amount)
+    await state.set_data({})
     await edit_card(
         bot,
         callback,
@@ -169,6 +209,7 @@ async def menu_add(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None
 @router.callback_query(MenuCB.filter(F.action == "buy"))
 async def menu_buy(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
     await state.set_state(AddPurchase.text)
+    await state.set_data({})
     await edit_card(
         bot,
         callback,
@@ -180,40 +221,47 @@ async def menu_buy(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None
     await callback.answer()
 
 
-@router.message(AddContribution.amount, F.text)
+@router.message(AddContribution.amount, PromptReply(), F.text)
 async def contribution_amount(
-    message: Message, session: AsyncSession, user: User, state: FSMContext
+    message: Message, session: AsyncSession, user: User, state: FSMContext, bot: Bot
 ) -> None:
     amount, _ = parse_amount(message.text)
     if amount is None:
-        await message.answer(
+        await message.reply(
             "Не понял сумму. Напишите числом, например <code>5000</code>.",
-            reply_markup=keyboards.cancel_kb(),
+            reply_markup=keyboards.cancel_kb() if message.chat.type == "private" else None,
         )
         return
 
-    group = await service.resolve_active_group(session, user)
+    data = await state.get_data()
+    await state.clear()
+    await drop_prompt(bot, data)
+
+    # В группе деньги идут в бюджет этого чата, а не в активный бюджет человека.
+    group = await resolve_group(session, message, user)
     if group is None:
-        await state.clear()
         await message.answer(NO_GROUP_HINT)
         return
 
-    await state.clear()
-    await record_contribution(message, session, user, group, amount, "dm")
+    await record_contribution(message, session, user, group, amount, source_for(message))
 
 
-@router.message(AddPurchase.text, F.text)
+@router.message(AddPurchase.text, PromptReply(), F.text)
 async def purchase_text(
     message: Message, session: AsyncSession, user: User, state: FSMContext, bot: Bot
 ) -> None:
-    group = await service.resolve_active_group(session, user)
+    data = await state.get_data()
+    await state.clear()
+    await drop_prompt(bot, data)
+
+    group = await resolve_group(session, message, user)
     if group is None:
-        await state.clear()
         await message.answer(NO_GROUP_HINT)
         return
 
-    await state.clear()
-    await record_purchase(message, session, user, group, message.text, "dm", bot)
+    await record_purchase(
+        message, session, user, group, message.text, source_for(message), bot
+    )
 
 
 # --------------------------------------------------------------------------- #

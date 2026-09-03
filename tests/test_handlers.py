@@ -38,16 +38,22 @@ def upd(**kw):
     _uid[0] += 1
     return Update(update_id=_uid[0], **kw)
 
-def msg(text, user=ANYA, chat=PRIVATE, entities=None):
+def msg(text, user=ANYA, chat=PRIVATE, reply_to=None, message_id=None):
     _uid[0] += 1
-    m = Message(message_id=_uid[0], date=dt.datetime.now(), chat=chat,
-                from_user=user, text=text)
+    m = Message(message_id=message_id or _uid[0], date=dt.datetime.now(), chat=chat,
+                from_user=user, text=text, reply_to_message=reply_to)
     return m.as_(bot)
 
-async def send(text, user=ANYA, chat=PRIVATE):
+async def send(text, user=ANYA, chat=PRIVATE, reply_to=None):
     session.reset()
-    await dp.feed_update(bot, upd(message=msg(text, user, chat)))
+    await dp.feed_update(bot, upd(message=msg(text, user, chat, reply_to)))
     return session.texts()
+
+
+def bot_msg(message_id, chat=GROUP):
+    """Сообщение бота — на него отвечают в группе."""
+    return Message(message_id=message_id, date=dt.datetime.now(), chat=chat,
+                   from_user=TgUser(id=999, is_bot=True, first_name="Bot"), text="?")
 
 async def press(data, user=ANYA, chat=PRIVATE, inline_message_id=None):
     session.reset()
@@ -55,7 +61,7 @@ async def press(data, user=ANYA, chat=PRIVATE, inline_message_id=None):
         id=str(_uid[0]), from_user=user, chat_instance="x", data=data,
         message=None if inline_message_id else msg("карточка", user, chat),
         inline_message_id=inline_message_id,
-    )
+    ).as_(bot)
     await dp.feed_update(bot, upd(callback_query=cb))
     return session.texts()
 
@@ -143,6 +149,74 @@ async def main():
     show("покупка в активной группе", await send("вода 300"))
     show("/members", await send("/members"))
     show("/web без PUBLIC_BASE_URL", await send("/web"))
+
+
+    # ------------------------------------------------------------------ #
+    #  Регрессии: двухшаговый ввод и отмена в группе
+    # ------------------------------------------------------------------ #
+    from aiogram.fsm.storage.base import StorageKey
+
+    print("\n" + "=" * 60 + "\nРЕГРЕССИИ\n" + "=" * 60)
+    key = StorageKey(bot_id=bot.id, chat_id=GROUP.id, user_id=ANYA.id)
+
+    # /buy@bot без аргументов -> ForceReply ответом на команду
+    session.reset()
+    await dp.feed_update(bot, upd(message=msg("/buy@budget_bot", ANYA, GROUP)))
+    sent = session.find("SendMessage")[-1]
+    assert sent.get("reply_parameters") or sent.get("reply_to_message_id"), \
+        "приглашение должно быть ответом на команду, иначе selective не сработает"
+    assert sent["reply_markup"].get("force_reply"), "в группе нужен ForceReply"
+    show("/buy@bot в группе", session.texts())
+
+    prompt_id = (await dp.storage.get_data(key))["prompt_id"]
+    assert prompt_id, "бот обязан запомнить своё приглашение"
+
+    # постороннее сообщение в группе приглашение не перехватывает
+    out = await send("просто болтаем в чате", ANYA, GROUP)
+    assert out == [], f"чужая реплика не должна становиться покупкой: {out}"
+    print("\n### постороннее сообщение в группе — проигнорировано ✓")
+
+    # ответ на приглашение — записывает покупку и убирает приглашение
+    session.reset()
+    await dp.feed_update(bot, upd(message=msg(
+        "яблоки и груши 640", ANYA, GROUP, reply_to=bot_msg(prompt_id))))
+    out = session.texts()
+    show("ответ на приглашение", out)
+    assert any("640" in text for text in out), "ответ должен создать покупку"
+    assert session.find("DeleteMessage"), "приглашение убирается после ответа"
+
+    # отмена в личке возвращает меню
+    await send("/buy")
+    show("отмена в личке", await press("m:cancel"))
+
+    # отмена в группе удаляет сообщение и отвечает на колбэк
+    session.reset()
+    cb = CallbackQuery(id="c1", from_user=ANYA, chat_instance="x", data="m:cancel",
+                       message=msg("Сколько внести?", ANYA, GROUP)).as_(bot)
+    await dp.feed_update(bot, upd(callback_query=cb))
+    assert session.find("DeleteMessage"), "отмена в группе должна удалять сообщение"
+    assert session.find("AnswerCallbackQuery"), "колбэк обязан получить ответ"
+    print("### отмена в группе: DeleteMessage + ответ на колбэк ✓")
+
+    # «В меню» на карточке в группе: без web_app-кнопки (иначе BUTTON_TYPE_INVALID)
+    session.reset()
+    cb = CallbackQuery(id="c2", from_user=ANYA, chat_instance="x", data="m:home",
+                       message=msg("карточка", ANYA, GROUP)).as_(bot)
+    await dp.feed_update(bot, upd(callback_query=cb))
+    keyboard = session.find("EditMessageText")[-1]["reply_markup"]
+    buttons = [b for row in keyboard["inline_keyboard"] for b in row]
+    assert not any(b.get("web_app") for b in buttons), "web_app-кнопка вне лички недопустима"
+    print("### меню в группе — без web_app-кнопки ✓")
+
+    # упавший хендлер всё равно обязан ответить на колбэк, иначе кнопка «висит»
+    session.reset()
+    session.fail_on.add("EditMessageText")
+    cb = CallbackQuery(id="c3", from_user=ANYA, chat_instance="x", data="m:home",
+                       message=msg("карточка", ANYA, GROUP)).as_(bot)
+    await dp.feed_update(bot, upd(callback_query=cb))
+    assert session.find("AnswerCallbackQuery"), "после ошибки колбэк остался без ответа"
+    print("### ошибка в хендлере — колбэк всё равно отвечен ✓")
+
 
     print("\nOK: хендлеры отработали")
 

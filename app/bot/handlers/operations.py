@@ -1,7 +1,10 @@
 """Список операций, карточка, правка и удаление."""
 from __future__ import annotations
 
+from contextlib import suppress
+
 from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
@@ -9,7 +12,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards, texts
 from app.bot.callbacks import MenuCB, OpCB, OpsPageCB
-from app.bot.common import NO_GROUP_HINT, edit_card, resolve_group, show_operation_card
+from app.bot.common import (
+    NO_GROUP_HINT,
+    edit_card,
+    is_private,
+    resolve_group,
+    show_operation_card,
+)
+from app.bot.filters import PromptReply
 from app.bot.states import EditOperation
 from app.core import service
 from app.core.money import parse_amount
@@ -223,14 +233,24 @@ async def op_amount_prompt(
         return
 
     await state.set_state(EditOperation.amount)
-    await state.update_data(
-        op_id=operation.id, inline_message_id=callback.inline_message_id
+    # prompt_id — карточка, на которую нужно ответить: в группе бот принимает
+    # только reply на своё сообщение (см. PromptReply).
+    await state.set_data(
+        {
+            "op_id": operation.id,
+            "inline_message_id": callback.inline_message_id,
+            "prompt_id": callback.message.message_id if callback.message else None,
+            "prompt_chat_id": callback.message.chat.id if callback.message else None,
+        }
     )
-    where = (
-        "Отправьте новую сумму боту в личку."
-        if callback.inline_message_id
-        else "Отправьте новую сумму сообщением."
-    )
+
+    if callback.inline_message_id:
+        where = "Отправьте новую сумму боту в личку."
+    elif is_private(callback):
+        where = "Отправьте новую сумму сообщением."
+    else:
+        where = "Ответьте на это сообщение новой суммой."
+
     await edit_card(
         bot,
         callback,
@@ -241,21 +261,21 @@ async def op_amount_prompt(
     await callback.answer()
 
 
-@router.message(EditOperation.amount, F.text)
+@router.message(EditOperation.amount, PromptReply(), F.text)
 async def op_amount_set(
     message: Message, session: AsyncSession, user: User, state: FSMContext, bot: Bot
 ) -> None:
     amount, _ = parse_amount(message.text)
     if amount is None:
-        await message.answer("Не понял сумму. Напишите числом, например <code>850</code>.")
+        await message.reply("Не понял сумму. Напишите числом, например <code>850</code>.")
         return
 
     data = await state.get_data()
     await state.clear()
 
-    operation = await service.get_operation(session, int(data.get("op_id", 0)))
+    operation = await service.get_operation(session, int(data.get("op_id") or 0))
     if operation is None or not await service.can_manage(session, operation, user):
-        await message.answer("Операция не найдена или недоступна для правки.")
+        await message.reply("Операция не найдена или недоступна для правки.")
         return
 
     await service.edit_operation(session, operation, amount=amount)
@@ -267,15 +287,33 @@ async def op_amount_set(
         header="✏️ <b>Сумма обновлена</b>",
         members_total=len(members),
     )
-    await message.answer(card, reply_markup=keyboards.operation_kb(operation, compact=True))
+    markup = keyboards.operation_kb(operation, compact=True)
 
-    inline_message_id = data.get("inline_message_id")
-    if inline_message_id:
-        await bot.edit_message_text(
-            text=card,
-            inline_message_id=inline_message_id,
-            reply_markup=keyboards.operation_kb(operation, compact=True),
+    # Правим ту же карточку, чтобы в чате не оставалось устаревшей копии.
+    updated = False
+    if data.get("inline_message_id"):
+        with suppress(TelegramBadRequest):
+            await bot.edit_message_text(
+                text=card, inline_message_id=data["inline_message_id"], reply_markup=markup
+            )
+            updated = True
+    elif data.get("prompt_chat_id") and data.get("prompt_id"):
+        with suppress(TelegramBadRequest):
+            await bot.edit_message_text(
+                text=card,
+                chat_id=data["prompt_chat_id"],
+                message_id=data["prompt_id"],
+                reply_markup=markup,
+            )
+            updated = True
+
+    if updated:
+        await message.reply(
+            f"✏️ Операция <code>#{operation.id}</code> — теперь "
+            f"<b>{texts.money(operation.amount)}</b>."
         )
+    else:
+        await message.answer(card, reply_markup=markup)
 
 
 @router.callback_query(OpCB.filter(F.action == "del"))
@@ -313,6 +351,6 @@ async def op_delete(
         f"🗑 Операция <code>#{operation.id}</code> на "
         f"{texts.money(operation.amount)} удалена.\n"
         f"💼 В фонде: <b>{texts.money(data.fund_left)}</b>",
-        keyboards.back_home_kb(),
+        keyboards.back_home_kb() if is_private(callback) else None,
     )
     await callback.answer("Удалено")

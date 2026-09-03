@@ -32,7 +32,7 @@ def main_menu(*, web_app_url: str | None = None) -> InlineKeyboardMarkup:
 def cancel_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="✖️ Отмена", callback_data=MenuCB(action="home").pack())]
+            [InlineKeyboardButton(text="✖️ Отмена", callback_data=MenuCB(action="cancel").pack())]
         ]
     )
 
