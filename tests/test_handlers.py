@@ -80,18 +80,18 @@ def assert_markup_ok(where: str) -> None:
     for name, data in session.calls:
         if name == "AnswerCallbackQuery":
             continue  # всплывающая подсказка показывается как есть, без разбора
-        for field in ("text", "caption"):
-            value = data.get(field)
-            if not value:
-                continue
-            errors = validate(value)
-            assert not errors, f"{where} -> {name}.{field}: {errors}" + chr(10) + value
+
+        rich = (data.get("rich_message") or {}).get("markdown")
+        if rich:
+            errors = validate(rich)
+            assert not errors, f"{where} -> {name}: {errors}" + chr(10) + rich
+
         for result in data.get("results", []):
             content = result.get("input_message_content") or {}
-            for value in (content.get("message_text"), result.get("caption")):
-                if value:
-                    errors = validate(value)
-                    assert not errors, f"{where} -> inline: {errors}" + chr(10) + value
+            markdown = (content.get("rich_message") or {}).get("markdown")
+            if markdown:
+                errors = validate(markdown)
+                assert not errors, f"{where} -> inline: {errors}" + chr(10) + markdown
 
 
 def show(title, lines):
@@ -185,7 +185,7 @@ async def main():
     # /buy@bot без аргументов -> ForceReply ответом на команду
     session.reset()
     await dp.feed_update(bot, upd(message=msg("/buy@budget_bot", ANYA, GROUP)))
-    sent = session.find("SendMessage")[-1]
+    sent = session.find("SendRichMessage")[-1]
     assert sent.get("reply_parameters") or sent.get("reply_to_message_id"), \
         "приглашение должно быть ответом на команду, иначе selective не сработает"
     assert sent["reply_markup"].get("force_reply"), "в группе нужен ForceReply"
@@ -283,7 +283,7 @@ async def main():
     kb = InlineKeyboardMarkup.model_validate(private_kb)
     out = await press_on(photo_msg(PRIVATE, kb), "m:home")
     assert out.find("DeleteMessage"), "картинку нельзя править текстом — её заменяют"
-    assert out.find("SendMessage"), "меню должно прийти новым сообщением"
+    assert out.find("SendRichMessage"), "меню должно прийти новым сообщением"
     assert out.find("AnswerCallbackQuery"), "колбэк без ответа — кнопка «висит»"
     print("### «В меню» на диаграмме: старое сообщение удалено, меню отправлено ✓")
 
@@ -324,7 +324,7 @@ async def main():
     show("/web в группе", out)
     assert await tokens_issued() == before, "в группе токен создаваться не должен"
     assert not any("login=" in text for text in out), "ссылка входа утекла в общий чат"
-    button = session.find("SendMessage")[-1]["reply_markup"]["inline_keyboard"][0][0]
+    button = session.find("SendRichMessage")[-1]["reply_markup"]["inline_keyboard"][0][0]
     assert button["url"].endswith("?start=web"), button
     print("\n### /web в группе: ни токена, ни ссылки — только кнопка в личку ✓")
 

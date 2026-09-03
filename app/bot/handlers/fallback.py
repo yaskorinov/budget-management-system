@@ -6,7 +6,7 @@ from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards, texts
-from app.bot.common import NO_GROUP_HINT
+from app.bot.common import NO_GROUP_HINT, answer_rich
 from app.bot.handlers.entry import record_purchase
 from app.core import service
 from app.core.money import parse_amount
@@ -21,7 +21,7 @@ async def private_text(
 ) -> None:
     amount, _ = parse_amount(message.text)
     if amount is None:
-        await message.answer(
+        await answer_rich(message, 
             texts.lines(
                 texts.join(
                     "Не понял. Напишите покупку с суммой — ",
@@ -36,6 +36,6 @@ async def private_text(
 
     group = await service.resolve_active_group(session, user)
     if group is None:
-        await message.answer(NO_GROUP_HINT)
+        await answer_rich(message, NO_GROUP_HINT)
         return
     await record_purchase(message, session, user, group, message.text, "dm", bot)

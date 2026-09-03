@@ -14,6 +14,7 @@ from app.bot import keyboards, texts
 from app.bot.callbacks import MenuCB, OpCB, OpsPageCB
 from app.bot.common import (
     NO_GROUP_HINT,
+    answer_rich,
     edit_card,
     group_for_callback,
     is_private,
@@ -39,25 +40,19 @@ async def render_operations(
         session, group_id=group.id, author_id=author_id, limit=PAGE, offset=offset
     )
     total = await service.count_operations(session, group_id=group.id, author_id=author_id)
-    heading = "Мои операции" if scope == "mine" else "Операции группы"
-    title = texts.join("📒 ", texts.bold(heading), " · ", texts.italic(group.title))
+    scope_title = "Мои операции" if scope == "mine" else "Операции группы"
+    subtitle = group.title
     if total:
-        title = texts.lines(
-            title,
-            texts.italic(
-                str(offset + 1), "–", str(offset + len(operations)), " из ", str(total)
-            ),
-        )
+        subtitle += f" · {offset + 1}–{offset + len(operations)} из {total}"
 
     text = texts.operations_text(
         operations,
-        title=title,
+        title=texts.heading(2, texts.join("📒 ", scope_title)),
+        subtitle=subtitle,
         empty="Пока пусто. Добавьте взнос или покупку",
     )
-    text = texts.lines(
-        text,
-        texts.join(""),
-        texts.italic("Нажмите номер операции, чтобы открыть карточку с правкой"),
+    text = texts.blocks(
+        text, texts.italic("Нажмите номер операции, чтобы открыть карточку с правкой")
     )
     markup = keyboards.ops_kb(
         operations, scope=scope, offset=offset, has_more=offset + PAGE < total, page=PAGE
@@ -69,11 +64,11 @@ async def render_operations(
 async def ops_command(message: Message, session: AsyncSession, user: User) -> None:
     group = await resolve_group(session, message, user)
     if group is None:
-        await message.answer(NO_GROUP_HINT)
+        await answer_rich(message, NO_GROUP_HINT)
         return
     scope = "all" if message.chat.type != "private" else "mine"
     text, markup = await render_operations(session, user, group, scope=scope, offset=0)
-    await message.answer(text, reply_markup=markup)
+    await answer_rich(message, text, reply_markup=markup)
 
 
 @router.callback_query(MenuCB.filter(F.action == "ops"))
@@ -289,7 +284,7 @@ async def op_amount_set(
 ) -> None:
     amount, _ = parse_amount(message.text)
     if amount is None:
-        await message.reply(
+        await answer_rich(message, reply=True, markdown=
             texts.join("Не понял сумму. Напишите числом, например ", texts.code("850"))
         )
         return
@@ -299,7 +294,7 @@ async def op_amount_set(
 
     operation = await service.get_operation(session, int(data.get("op_id") or 0))
     if operation is None or not await service.can_manage(session, operation, user):
-        await message.reply(texts.join("Операция не найдена или недоступна для правки."))
+        await answer_rich(message, reply=True, markdown=texts.join("Операция не найдена или недоступна для правки."))
         return
 
     await service.edit_operation(session, operation, amount=amount)
@@ -332,14 +327,14 @@ async def op_amount_set(
             updated = True
 
     if updated:
-        await message.reply(
+        await answer_rich(message, reply=True, markdown=
             texts.join(
                 "✏️ ", texts.code("#" + str(operation.id)), " — теперь ",
                 texts.bold(texts.money(operation.amount)),
             )
         )
     else:
-        await message.answer(card, reply_markup=markup)
+        await answer_rich(message, card, reply_markup=markup)
 
 
 @router.callback_query(OpCB.filter(F.action == "del"))

@@ -35,8 +35,8 @@ class MockSession(BaseSession):
 
         if name == "GetMe":
             return BOT_USER
-        if name in {"SendMessage", "SendPhoto", "EditMessageText", "EditMessageMedia",
-                    "EditMessageCaption", "EditMessageReplyMarkup"}:
+        if name in {"SendMessage", "SendRichMessage", "SendPhoto", "EditMessageText",
+                    "EditMessageMedia", "EditMessageCaption", "EditMessageReplyMarkup"}:
             if data.get("inline_message_id"):
                 return True
             self._msg_id += 1
@@ -50,7 +50,11 @@ class MockSession(BaseSession):
                 date=dt.datetime.now(),
                 chat=Chat(id=data.get("chat_id", 1), type="private"),
                 from_user=BOT_USER,
-                text=None if photo else (data.get("text") or ""),
+                text=None if photo else (
+                    data.get("text")
+                    or (data.get("rich_message") or {}).get("markdown")
+                    or ""
+                ),
                 caption=data.get("caption") if photo else None,
                 photo=photo,
             )
@@ -62,8 +66,11 @@ class MockSession(BaseSession):
     def texts(self):
         out = []
         for name, data in self.calls:
-            if name in {"SendMessage", "EditMessageText"}:
-                out.append(data.get("text", ""))
+            if name in {"SendMessage", "SendRichMessage", "EditMessageText"}:
+                out.append(
+                    data.get("text")
+                    or (data.get("rich_message") or {}).get("markdown", "")
+                )
             elif name in {"SendPhoto", "EditMessageCaption"}:
                 out.append("[PHOTO] " + (data.get("caption") or ""))
             elif name == "AnswerInlineQuery":

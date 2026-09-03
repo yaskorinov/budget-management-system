@@ -18,6 +18,7 @@ from app.bot import keyboards, texts
 from app.bot.callbacks import MenuCB, StatsCB
 from app.bot.common import (
     NO_GROUP_HINT,
+    answer_rich,
     edit_card,
     group_for_callback,
     is_private,
@@ -29,8 +30,19 @@ from app.db.models import Group, User
 router = Router(name="stats")
 
 
-def _caption(report: reports.Report) -> str:
+def _caption(report: reports.Report):
+    """Rich-подпись для текстовых сообщений."""
     return texts.stats_caption(
+        group_title=report.group.title,
+        mode=report.mode,
+        period_title=report.period_title,
+        total=report.total,
+    )
+
+
+def _photo_caption(report: reports.Report) -> str:
+    """Подпись под диаграммой: у фотографий rich-разметки нет."""
+    return texts.stats_caption_plain(
         group_title=report.group.title,
         mode=report.mode,
         period_title=report.period_title,
@@ -47,27 +59,23 @@ async def send_report(
     )
 
     if report.is_empty:
-        await message.answer(
-            texts.lines(
-                _caption(report),
-                texts.join(""),
-                texts.italic("За этот период расходов нет"),
-            ),
+        await answer_rich(message, 
+            texts.blocks(_caption(report), texts.italic("За этот период расходов нет")),
             reply_markup=markup,
         )
         return
 
     png = reports.render_png(report)
     if png is None:
-        await message.answer(
-            texts.lines(_caption(report), texts.pre(reports.render_text(report))),
+        await answer_rich(message, 
+            texts.blocks(_caption(report), texts.stats_table(report.slices, report.total)),
             reply_markup=markup,
         )
         return
 
     await message.answer_photo(
         BufferedInputFile(png, filename=f"stats-{report.mode}.png"),
-        caption=_caption(report),
+        caption=_photo_caption(report),
         reply_markup=markup,
     )
 
@@ -78,7 +86,7 @@ async def stats_command(
 ) -> None:
     group = await resolve_group(session, message, user)
     if group is None:
-        await message.answer(NO_GROUP_HINT)
+        await answer_rich(message, NO_GROUP_HINT)
         return
 
     args = (command.args or "").split()
@@ -91,10 +99,10 @@ async def stats_command(
 async def balance_command(message: Message, session: AsyncSession, user: User) -> None:
     group = await resolve_group(session, message, user)
     if group is None:
-        await message.answer(NO_GROUP_HINT)
+        await answer_rich(message, NO_GROUP_HINT)
         return
     data = await service.summary(session, group=group)
-    await message.answer(texts.summary_text(data))
+    await answer_rich(message, texts.summary_text(data))
 
 
 @router.callback_query(MenuCB.filter(F.action == "stats"))
@@ -152,14 +160,14 @@ async def stats_switch(
 
     message = callback.message
     was_photo = bool(getattr(message, "photo", None))
-    caption = _caption(report)
+    caption = _caption(report)  # для текстового варианта
 
     try:
         if png and was_photo:
             await message.edit_media(
                 InputMediaPhoto(
                     media=BufferedInputFile(png, filename=f"stats-{report.mode}.png"),
-                    caption=caption,
+                    caption=_photo_caption(report),
                 ),
                 reply_markup=markup,
             )
@@ -170,18 +178,18 @@ async def stats_switch(
             await bot.send_photo(
                 message.chat.id,
                 BufferedInputFile(png, filename=f"stats-{report.mode}.png"),
-                caption=caption,
+                caption=_photo_caption(report),
                 reply_markup=markup,
             )
         else:
             body = (
                 texts.italic("За этот период расходов нет")
                 if report.is_empty
-                else texts.pre(reports.render_text(report))
+                else texts.stats_table(report.slices, report.total)
             )
             # Диаграмму за пустой период оставлять нельзя: старая картинка
             # с новой подписью выглядит как настоящие данные.
-            await edit_card(bot, callback, texts.lines(caption, body), markup)
+            await edit_card(bot, callback, texts.blocks(caption, body), markup)
     except TelegramBadRequest as exc:
         if "message is not modified" not in str(exc):
             raise

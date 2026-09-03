@@ -18,6 +18,7 @@ from app.bot.callbacks import GroupCB, MenuCB
 from app.bot.common import (
     GROUP_CHATS,
     NO_GROUP_HINT,
+    answer_rich,
     edit_card,
     is_private,
     resolve_group,
@@ -66,7 +67,7 @@ async def join_group_chat(message: Message, session: AsyncSession, user: User) -
     names = ", ".join(m.short_name for m in members)
 
     if was_member:
-        await message.answer(
+        await answer_rich(message, 
             texts.lines(
                 texts.join("Вы уже участвуете в бюджете «", group.title, "»."),
                 texts.join("👥 Участники (", str(len(members)), "): ", names),
@@ -75,28 +76,23 @@ async def join_group_chat(message: Message, session: AsyncSession, user: User) -
         return
 
     if len(members) == 1:
-        head = texts.join(
-            "✅ ", texts.bold("Бюджет «", group.title, "» подключён к этому чату")
-        )
+        head = texts.join("✅ Бюджет «", group.title, "» подключён к этому чату")
     else:
-        head = texts.join(
-            "✅ ", texts.bold(user.short_name, " в деле"), " — «", group.title, "»"
-        )
+        head = texts.join("✅ ", user.short_name, " в деле — «", group.title, "»")
 
-    await message.answer(
-        texts.lines(
-            head,
-            texts.quote(texts.join("👥 Участники (", str(len(members)), "): ", names)),
+    await answer_rich(
+        message,
+        texts.blocks(
+            texts.heading(2, head),
+            texts.join("👥 Участники (", str(len(members)), "): ", names),
             texts.bold("Дальше"),
-            texts.quote(
-                texts.lines(
-                    texts.join(texts.code("/add 5000"), " — взнос в фонд"),
-                    texts.join(texts.code("/buy молоко хлеб 850"), " — покупка"),
-                    texts.join(texts.code("/join"), " — остальным, чтобы попасть в расчёты"),
-                    texts.join(texts.code("/help"), " — всё остальное"),
-                )
+            texts.bullets(
+                texts.join(texts.code("/add 5000"), " — взнос в фонд"),
+                texts.join(texts.code("/buy молоко хлеб 850"), " — покупка"),
+                texts.join(texts.code("/join"), " — остальным, чтобы попасть в расчёты"),
+                texts.join(texts.code("/help"), " — всё остальное"),
             ),
-        )
+        ),
     )
 
 
@@ -114,13 +110,13 @@ async def start_private(
         return
 
     text, markup = await render_home(session, user)
-    await message.answer(text, reply_markup=markup)
+    await answer_rich(message, text, reply_markup=markup)
 
 
 @router.message(Command("help"))
 async def help_command(message: Message, bot: Bot) -> None:
     me = await bot.me()
-    await message.answer(texts.help_text(me.username))
+    await answer_rich(message, texts.help_text(me.username))
 
 
 @router.message(Command("newgroup"), F.chat.type == "private")
@@ -129,13 +125,13 @@ async def new_group(
 ) -> None:
     title = (command.args or "").strip()
     if not title:
-        await message.answer(
+        await answer_rich(message, 
             texts.join("Укажите название: ", texts.code("/newgroup Квартира на Лесной"))
         )
         return
     group = await service.create_group(session, title=title, owner=user)
     await service.set_active_group(session, user, group.id)
-    await message.answer(
+    await answer_rich(message, 
         texts.lines(
             texts.join("✅ ", texts.bold("Бюджет «", group.title, "» создан")),
             texts.quote(
@@ -155,9 +151,9 @@ async def new_group(
 async def groups_command(message: Message, session: AsyncSession, user: User) -> None:
     groups = await service.user_groups(session, user.id)
     if not groups:
-        await message.answer(NO_GROUP_HINT)
+        await answer_rich(message, NO_GROUP_HINT)
         return
-    await message.answer(
+    await answer_rich(message, 
         texts.join("Ваши бюджеты — выберите активный (операции из лички и inline пойдут в него):"),
         reply_markup=keyboards.groups_kb(groups, user.active_group_id),
     )
@@ -185,11 +181,11 @@ async def pick_group(
 async def members_command(message: Message, session: AsyncSession, user: User) -> None:
     group = await resolve_group(session, message, user)
     if group is None:
-        await message.answer(NO_GROUP_HINT)
+        await answer_rich(message, NO_GROUP_HINT)
         return
     members = await service.group_members(session, group.id)
     roster = texts.lines(*[texts.join("• ", m.display_name) for m in members]) or texts.italic("пусто")
-    await message.answer(
+    await answer_rich(message, 
         texts.lines(texts.join("💼 ", texts.bold(group.title)), texts.quote(roster))
     )
 
@@ -200,7 +196,7 @@ async def leave_command(message: Message, session: AsyncSession, user: User) -> 
     if group is None:
         return
     await service.leave_group(session, group_id=group.id, user_id=user.id)
-    await message.answer(
+    await answer_rich(message, 
         texts.join(
             user.short_name,
             " больше не участвует в расчётах этого бюджета. ",
@@ -212,13 +208,13 @@ async def leave_command(message: Message, session: AsyncSession, user: User) -> 
 async def send_login_link(message: Message, session: AsyncSession, user: User) -> None:
     """Выдаёт одноразовую ссылку входа. Только в личке — см. web_command_in_group."""
     if not settings.web_enabled:
-        await message.answer(
+        await answer_rich(message, 
             texts.join("Веб-версия не настроена: в .env нужен PUBLIC_BASE_URL с https.")
         )
         return
 
     token = await service.create_login_token(session, user.id)
-    await message.answer(
+    await answer_rich(message, 
         texts.lines(
             texts.join("🌐 ", texts.bold("Вход в веб-версию")),
             texts.quote(
@@ -230,7 +226,6 @@ async def send_login_link(message: Message, session: AsyncSession, user: User) -
             ),
             texts.italic("Никому её не пересылайте: она пускает в ваш аккаунт без пароля"),
         ),
-        disable_web_page_preview=True,
     )
 
 
@@ -256,7 +251,7 @@ async def web_command_in_group(message: Message, bot: Bot) -> None:
             ]
         ]
     )
-    await message.reply(
+    await answer_rich(message, reply=True, markdown=
         texts.join(
             "🔒 Ссылку для входа выдаю только в личных сообщениях: в общем чате ",
             "по ней мог бы зайти в ваш аккаунт кто угодно.",

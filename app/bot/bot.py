@@ -7,7 +7,6 @@ from contextlib import suppress
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import (
     BotCommand,
@@ -52,9 +51,9 @@ def create_bot() -> Bot:
         raise RuntimeError("BOT_TOKEN не задан — заполните .env")
     return Bot(
         token=settings.bot_token,
-        default=DefaultBotProperties(
-            parse_mode=ParseMode.MARKDOWN_V2, link_preview_is_disabled=True
-        ),
+        # parse_mode не задаём: форматированные сообщения уходят через
+        # sendRichMessage, а подписи к диаграммам — обычным текстом.
+        default=DefaultBotProperties(link_preview_is_disabled=True),
     )
 
 

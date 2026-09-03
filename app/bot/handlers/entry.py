@@ -15,6 +15,7 @@ from app.bot.callbacks import MenuCB
 from app.bot.common import (
     GROUP_CHATS,
     NO_GROUP_HINT,
+    answer_rich,
     drop_prompt,
     edit_card,
     resolve_group,
@@ -62,11 +63,11 @@ async def ask_for_input(
     обычную реплику в чате он бы просто не получил.
     """
     if message.chat.type == "private":
-        prompt = await message.answer(
+        prompt = await answer_rich(message, 
             texts.join(text), reply_markup=keyboards.cancel_kb()
         )
     else:
-        prompt = await message.reply(
+        prompt = await answer_rich(message, reply=True, markdown=
             texts.lines(
                 texts.join(text),
                 texts.join(""),
@@ -92,7 +93,7 @@ async def record_contribution(
         session, group_id=group.id, author_id=user.id, amount=amount, source=source
     )
     data = await service.summary(session, group=group)
-    await message.answer(
+    await answer_rich(message, 
         texts.operation_card(operation, group=card_group(message, group), fund_left=data.fund_left),
         reply_markup=keyboards.operation_kb(operation, compact=True),
     )
@@ -110,7 +111,7 @@ async def record_purchase(
     await bot.send_chat_action(message.chat.id, "typing")
     parsed = await parse_purchase(text)
     if not parsed.amount:
-        await message.answer(
+        await answer_rich(message, 
             texts.join("Не нашёл сумму. Напишите так: ", texts.code("молоко хлеб 850")),
             reply_markup=keyboards.cancel_kb() if message.chat.type == "private" else None,
         )
@@ -129,7 +130,7 @@ async def record_purchase(
     )
     members = await service.group_members(session, group.id)
     data = await service.summary(session, group=group)
-    await message.answer(
+    await answer_rich(message, 
         texts.operation_card(
             operation,
             group=card_group(message, group),
@@ -157,7 +158,7 @@ async def add_command(
         session, message, user, join=message.chat.type in GROUP_CHATS
     )
     if group is None:
-        await message.answer(NO_GROUP_HINT)
+        await answer_rich(message, NO_GROUP_HINT)
         return
 
     amount, _ = parse_amount(command.args or "")
@@ -186,7 +187,7 @@ async def buy_command(
         session, message, user, join=message.chat.type in GROUP_CHATS
     )
     if group is None:
-        await message.answer(NO_GROUP_HINT)
+        await answer_rich(message, NO_GROUP_HINT)
         return
 
     text = (command.args or "").strip()
@@ -248,7 +249,7 @@ async def contribution_amount(
 ) -> None:
     amount, _ = parse_amount(message.text)
     if amount is None:
-        await message.reply(
+        await answer_rich(message, reply=True, markdown=
             texts.join("Не понял сумму. Напишите числом, например ", texts.code("5000")),
             reply_markup=keyboards.cancel_kb() if message.chat.type == "private" else None,
         )
@@ -261,7 +262,7 @@ async def contribution_amount(
     # В группе деньги идут в бюджет этого чата, а не в активный бюджет человека.
     group = await resolve_group(session, message, user)
     if group is None:
-        await message.answer(NO_GROUP_HINT)
+        await answer_rich(message, NO_GROUP_HINT)
         return
 
     await record_contribution(message, session, user, group, amount, source_for(message))
@@ -277,7 +278,7 @@ async def purchase_text(
 
     group = await resolve_group(session, message, user)
     if group is None:
-        await message.answer(NO_GROUP_HINT)
+        await answer_rich(message, NO_GROUP_HINT)
         return
 
     await record_purchase(
@@ -301,7 +302,7 @@ async def text_contribution(message: Message, session: AsyncSession, user: User)
         session, message, user, join=message.chat.type in GROUP_CHATS
     )
     if group is None:
-        await message.answer(NO_GROUP_HINT)
+        await answer_rich(message, NO_GROUP_HINT)
         return
     await record_contribution(message, session, user, group, amount, source_for(message))
 
@@ -319,6 +320,6 @@ async def text_purchase(
         session, message, user, join=message.chat.type in GROUP_CHATS
     )
     if group is None:
-        await message.answer(NO_GROUP_HINT)
+        await answer_rich(message, NO_GROUP_HINT)
         return
     await record_purchase(message, session, user, group, rest, source_for(message), bot)

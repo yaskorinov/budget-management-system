@@ -1,4 +1,4 @@
-aiogram==3.24.0
+aiogram==3.31.0  # Bot API 10.3: rich-сообщения
 sqlalchemy[asyncio]==2.0.44
 aiosqlite==0.21.0
 pydantic-settings==2.13.0

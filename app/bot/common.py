@@ -5,7 +5,13 @@ from contextlib import suppress
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardMarkup,
+    InputRichMessage,
+    Message,
+    ReplyParameters,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import texts
@@ -39,20 +45,17 @@ async def resolve_group(
     return await service.resolve_active_group(session, user)
 
 
-NO_GROUP_HINT = texts.lines(
-    texts.join("💼 ", texts.bold("У вас пока нет общего бюджета")),
-    texts.quote(
-        texts.lines(
-            texts.join(
-                "Добавьте бота в общий чат и отправьте там ",
-                texts.code("/join"),
-                " — бюджет создастся сам.",
-            ),
-            texts.join(
-                "Либо заведите его прямо здесь: ",
-                texts.code("/newgroup Название"),
-            ),
-        )
+NO_GROUP_HINT = texts.blocks(
+    texts.heading(2, "💼 У вас пока нет общего бюджета"),
+    texts.bullets(
+        texts.join(
+            "Добавьте бота в общий чат и отправьте там ",
+            texts.code("/join"),
+            " — бюджет создастся сам",
+        ),
+        texts.join(
+            "Либо заведите его прямо здесь: ", texts.code("/newgroup Название")
+        ),
     ),
 )
 
@@ -62,22 +65,49 @@ def is_private(callback: CallbackQuery) -> bool:
     return bool(callback.message and callback.message.chat.type == "private")
 
 
+def _thread_id(message: Message) -> int | None:
+    """Тема форума, если сообщение пришло из неё."""
+    return message.message_thread_id if getattr(message, "is_topic_message", False) else None
+
+
+async def answer_rich(
+    message: Message,
+    markdown: object,
+    *,
+    reply_markup: InlineKeyboardMarkup | None = None,
+    reply: bool = False,
+) -> Message:
+    """Отправляет rich-сообщение: заголовки, таблицы, списки, сворачиваемые блоки.
+
+    Это отдельный метод API (sendRichMessage), а не sendMessage с parse_mode.
+    """
+    return await message.bot.send_rich_message(
+        chat_id=message.chat.id,
+        message_thread_id=_thread_id(message),
+        rich_message=InputRichMessage(markdown=str(markdown)),
+        reply_markup=reply_markup,
+        reply_parameters=(
+            ReplyParameters(message_id=message.message_id) if reply else None
+        ),
+    )
+
+
 async def edit_card(
     bot: Bot,
     callback: CallbackQuery,
-    text: str,
+    markdown: object,
     markup: InlineKeyboardMarkup | None = None,
 ) -> None:
-    """Показывает текст на месте нажатой кнопки.
+    """Показывает rich-содержимое на месте нажатой кнопки.
 
-    Сообщение с картинкой (диаграмма статистики) текстом не правится — Telegram
-    отвечает «there is no text in the message to edit», поэтому такое сообщение
-    заменяем новым.
+    Сообщение с картинкой (диаграмма) текстом не правится — Telegram отвечает
+    «there is no text in the message to edit», поэтому его заменяем новым.
     """
+    rich = InputRichMessage(markdown=str(markdown))
     try:
         if callback.inline_message_id:
             await bot.edit_message_text(
-                text=text,
+                rich_message=rich,
                 inline_message_id=callback.inline_message_id,
                 reply_markup=markup,
             )
@@ -90,10 +120,20 @@ async def edit_card(
         if getattr(message, "text", None) is None:
             with suppress(TelegramBadRequest):
                 await message.delete()
-            await bot.send_message(message.chat.id, text, reply_markup=markup)
+            await bot.send_rich_message(
+                chat_id=message.chat.id,
+                message_thread_id=_thread_id(message),
+                rich_message=rich,
+                reply_markup=markup,
+            )
             return
 
-        await message.edit_text(text, reply_markup=markup)
+        await bot.edit_message_text(
+            rich_message=rich,
+            chat_id=message.chat.id,
+            message_id=message.message_id,
+            reply_markup=markup,
+        )
     except TelegramBadRequest as exc:
         if "message is not modified" not in str(exc):
             raise

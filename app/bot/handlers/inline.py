@@ -11,7 +11,8 @@ from aiogram.types import (
     InlineQueryResultArticle,
     InlineQueryResultPhoto,
     InlineQueryResultsButton,
-    InputTextMessageContent,
+    InputRichMessage,
+    InputRichMessageContent,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,14 +38,17 @@ def _article(
     result_id: str,
     title: str,
     description: str,
-    text: str,
+    text: object,
     markup=None,
 ) -> InlineQueryResultArticle:
+    """Результат inline-запроса, который отправит rich-сообщение."""
     return InlineQueryResultArticle(
         id=result_id,
         title=title,
         description=description,
-        input_message_content=InputTextMessageContent(message_text=text),
+        input_message_content=InputRichMessageContent(
+            rich_message=InputRichMessage(markdown=str(text))
+        ),
         reply_markup=markup,
     )
 
@@ -92,6 +96,12 @@ async def _stats_results(
         period_title=report.period_title,
         total=report.total,
     )
+    photo_caption = texts.stats_caption_plain(
+        group_title=group.title,
+        mode=report.mode,
+        period_title=report.period_title,
+        total=report.total,
+    )
 
     if report.is_empty:
         return [
@@ -99,8 +109,8 @@ async def _stats_results(
                 result_id=f"stats-empty-{report.mode}-{report.period}",
                 title=f"📊 Расходы {reports.MODES[report.mode]}",
                 description=f"{report.period_title}: расходов нет",
-                text=texts.lines(
-                    caption, texts.join(""), texts.italic("За этот период расходов нет")
+                text=texts.blocks(
+                    caption, texts.italic("За этот период расходов нет")
                 ),
             )
         ]
@@ -115,7 +125,7 @@ async def _stats_results(
                 thumbnail_url=url,
                 title=f"Расходы {reports.MODES[report.mode]}",
                 description=f"{report.period_title}, {format_money(report.total)}",
-                caption=caption,
+                caption=photo_caption,
             )
         ]
 
@@ -124,7 +134,7 @@ async def _stats_results(
             result_id=f"stats-text-{report.mode}-{report.period}",
             title=f"📊 Расходы {reports.MODES[report.mode]}",
             description=f"{report.period_title}, {format_money(report.total)}",
-            text=texts.lines(caption, texts.pre(reports.render_text(report))),
+            text=texts.blocks(caption, texts.stats_table(report.slices, report.total)),
         )
     ]
 
