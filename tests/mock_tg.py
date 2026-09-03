@@ -2,7 +2,7 @@
 from __future__ import annotations
 import datetime as dt
 from aiogram.client.session.base import BaseSession
-from aiogram.types import Chat, Message, User as TgUser
+from aiogram.types import Chat, Message, PhotoSize, User as TgUser
 
 BOT_USER = TgUser(id=999, is_bot=True, first_name="Budget", username="budget_bot")
 
@@ -40,12 +40,19 @@ class MockSession(BaseSession):
             if data.get("inline_message_id"):
                 return True
             self._msg_id += 1
+            photo = (
+                [PhotoSize(file_id="f", file_unique_id="u", width=800, height=450)]
+                if name == "SendPhoto"
+                else None
+            )
             return Message(
                 message_id=self._msg_id,
                 date=dt.datetime.now(),
                 chat=Chat(id=data.get("chat_id", 1), type="private"),
                 from_user=BOT_USER,
-                text=data.get("text") or data.get("caption") or "",
+                text=None if photo else (data.get("text") or ""),
+                caption=data.get("caption") if photo else None,
+                photo=photo,
             )
         return True
 

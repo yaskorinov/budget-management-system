@@ -15,6 +15,7 @@ from app.bot.callbacks import MenuCB, OpCB, OpsPageCB
 from app.bot.common import (
     NO_GROUP_HINT,
     edit_card,
+    group_for_callback,
     is_private,
     resolve_group,
     show_operation_card,
@@ -90,7 +91,7 @@ async def ops_page(
     user: User,
     bot: Bot,
 ) -> None:
-    group = await service.resolve_active_group(session, user)
+    group = await group_for_callback(session, callback, user)
     if group is None:
         await callback.answer("Нет активной группы", show_alert=True)
         return

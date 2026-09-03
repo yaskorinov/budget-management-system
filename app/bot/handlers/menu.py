@@ -209,6 +209,20 @@ async def cancel_action(
     await callback.answer("Отменено")
 
 
+@router.callback_query(MenuCB.filter(F.action == "close"))
+async def close_message(callback: CallbackQuery) -> None:
+    """Убирает сообщение бота — например, диаграмму из общего чата."""
+    try:
+        if callback.message:
+            await callback.message.delete()
+    except TelegramBadRequest:
+        await callback.answer(
+            "Не получилось удалить: сообщение старше 48 часов", show_alert=True
+        )
+        return
+    await callback.answer()
+
+
 @router.callback_query(MenuCB.filter(F.action == "help"))
 async def menu_help(callback: CallbackQuery, bot: Bot) -> None:
     me = await bot.me()

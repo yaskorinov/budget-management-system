@@ -69,14 +69,16 @@ def draft_categories_kb(draft_id: str) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def operation_kb(operation: Operation, *, compact: bool = False) -> InlineKeyboardMarkup:
+def operation_kb(
+    operation: Operation, *, compact: bool = False, private: bool = True
+) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     if operation.is_purchase:
         builder.button(text="✏️ Категория", callback_data=OpCB(action="cat", op_id=operation.id))
         builder.button(text="👥 Участники", callback_data=OpCB(action="parts", op_id=operation.id))
     builder.button(text="✏️ Сумма", callback_data=OpCB(action="amount", op_id=operation.id))
     builder.button(text="🗑 Удалить", callback_data=OpCB(action="del", op_id=operation.id))
-    if not compact:
+    if not compact and private:
         builder.button(text="⬅️ В меню", callback_data=MenuCB(action="home"))
     builder.adjust(2, 2, 1)
     return builder.as_markup()
@@ -116,7 +118,7 @@ def confirm_delete_kb(op_id: int) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def stats_kb(mode: str, period: str) -> InlineKeyboardMarkup:
+def stats_kb(mode: str, period: str, *, private: bool = True) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for code, title in (("categories", "По категориям"), ("people", "По людям")):
         builder.button(
@@ -128,7 +130,11 @@ def stats_kb(mode: str, period: str) -> InlineKeyboardMarkup:
             text=("• " if code == period else "") + title,
             callback_data=StatsCB(mode=mode, period=code),
         )
-    builder.button(text="⬅️ В меню", callback_data=MenuCB(action="home"))
+    # Личное меню посреди общего чата не нужно — там уместнее убрать диаграмму.
+    if private:
+        builder.button(text="⬅️ В меню", callback_data=MenuCB(action="home"))
+    else:
+        builder.button(text="🗑 Удалить", callback_data=MenuCB(action="close"))
     builder.adjust(2, 2, 2, 1)
     return builder.as_markup()
 

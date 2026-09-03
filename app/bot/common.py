@@ -56,7 +56,12 @@ async def edit_card(
     text: str,
     markup: InlineKeyboardMarkup | None = None,
 ) -> None:
-    """Редактирует сообщение и в обычном чате, и отправленное через inline."""
+    """Показывает текст на месте нажатой кнопки.
+
+    Сообщение с картинкой (диаграмма статистики) текстом не правится — Telegram
+    отвечает «there is no text in the message to edit», поэтому такое сообщение
+    заменяем новым.
+    """
     try:
         if callback.inline_message_id:
             await bot.edit_message_text(
@@ -64,11 +69,36 @@ async def edit_card(
                 inline_message_id=callback.inline_message_id,
                 reply_markup=markup,
             )
-        elif callback.message:
-            await callback.message.edit_text(text, reply_markup=markup)
+            return
+
+        message = callback.message
+        if message is None:
+            return
+
+        if getattr(message, "text", None) is None:
+            with suppress(TelegramBadRequest):
+                await message.delete()
+            await bot.send_message(message.chat.id, text, reply_markup=markup)
+            return
+
+        await message.edit_text(text, reply_markup=markup)
     except TelegramBadRequest as exc:
         if "message is not modified" not in str(exc):
             raise
+
+
+async def group_for_callback(session: AsyncSession, callback: CallbackQuery, user: User):
+    """Бюджет, к которому относится нажатая кнопка.
+
+    В групповом чате это всегда бюджет самого чата: у нажавшего активной может
+    быть совсем другая группа, и статистика показала бы чужие цифры.
+    """
+    chat = getattr(callback.message, "chat", None)
+    if chat is not None and chat.type in GROUP_CHATS:
+        return await service.get_or_create_group_for_chat(
+            session, tg_chat_id=chat.id, title=chat.title or "Общий бюджет"
+        )
+    return await service.resolve_active_group(session, user)
 
 
 async def drop_prompt(bot: Bot, data: dict) -> None:
@@ -97,5 +127,5 @@ async def show_operation_card(
         texts.operation_card(
             operation, group=group, header=header, members_total=len(members)
         ),
-        keyboards.operation_kb(operation),
+        keyboards.operation_kb(operation, private=is_private(callback)),
     )

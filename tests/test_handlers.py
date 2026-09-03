@@ -209,13 +209,83 @@ async def main():
     print("### меню в группе — без web_app-кнопки ✓")
 
     # упавший хендлер всё равно обязан ответить на колбэк, иначе кнопка «висит»
+    import logging
+
+    logging.getLogger("app.bot.bot").setLevel(logging.CRITICAL)  # падение здесь ожидаемое
     session.reset()
     session.fail_on.add("EditMessageText")
     cb = CallbackQuery(id="c3", from_user=ANYA, chat_instance="x", data="m:home",
                        message=msg("карточка", ANYA, GROUP)).as_(bot)
     await dp.feed_update(bot, upd(callback_query=cb))
     assert session.find("AnswerCallbackQuery"), "после ошибки колбэк остался без ответа"
+    logging.getLogger("app.bot.bot").setLevel(logging.NOTSET)
     print("### ошибка в хендлере — колбэк всё равно отвечен ✓")
+
+    # ---- статистика ----
+    from aiogram.types import PhotoSize
+
+    def photo_msg(chat, markup, message_id=5555):
+        """Сообщение-диаграмма: у него нет text, только caption."""
+        return Message(
+            message_id=message_id, date=dt.datetime.now(), chat=chat,
+            from_user=TgUser(id=999, is_bot=True, first_name="Bot"),
+            caption="📊 Расходы", reply_markup=markup,
+            photo=[PhotoSize(file_id="f", file_unique_id="u", width=800, height=450)],
+        )
+
+    async def press_on(message, data, user=ANYA):
+        session.reset()
+        cb = CallbackQuery(id="x", from_user=user, chat_instance="x",
+                           data=data, message=message).as_(bot)
+        await dp.feed_update(bot, upd(callback_query=cb))
+        return session
+
+    # в группе у диаграммы «Удалить», в личке — «В меню»
+    session.reset()
+    await dp.feed_update(bot, upd(message=msg("/stats категории", ANYA, GROUP)))
+    group_kb = session.find("SendPhoto")[-1]["reply_markup"]
+    group_buttons = [b["text"] for row in group_kb["inline_keyboard"] for b in row]
+    assert "🗑 Удалить" in group_buttons, group_buttons
+    assert "⬅️ В меню" not in group_buttons, "личное меню в общем чате ни к чему"
+
+    session.reset()
+    await dp.feed_update(bot, upd(message=msg("/stats категории", ANYA, PRIVATE)))
+    private_kb = session.find("SendPhoto")[-1]["reply_markup"]
+    private_buttons = [b["text"] for row in private_kb["inline_keyboard"] for b in row]
+    assert "⬅️ В меню" in private_buttons, private_buttons
+    print("\n### клавиатура диаграммы: в группе «Удалить», в личке «В меню» ✓")
+
+    # «В меню» на диаграмме в личке: сообщение с картинкой заменяется текстовым
+    from aiogram.types import InlineKeyboardMarkup
+    kb = InlineKeyboardMarkup.model_validate(private_kb)
+    out = await press_on(photo_msg(PRIVATE, kb), "m:home")
+    assert out.find("DeleteMessage"), "картинку нельзя править текстом — её заменяют"
+    assert out.find("SendMessage"), "меню должно прийти новым сообщением"
+    assert out.find("AnswerCallbackQuery"), "колбэк без ответа — кнопка «висит»"
+    print("### «В меню» на диаграмме: старое сообщение удалено, меню отправлено ✓")
+
+    # «Удалить» на диаграмме в группе
+    kb_group = InlineKeyboardMarkup.model_validate(group_kb)
+    out = await press_on(photo_msg(GROUP, kb_group), "m:close")
+    assert out.find("DeleteMessage"), "кнопка «Удалить» должна убирать диаграмму"
+    print("### «Удалить» в группе убирает диаграмму ✓")
+
+    # повторное нажатие на уже выбранную категорию — без обращения к Telegram
+    active = next(b for row in kb.inline_keyboard for b in row
+                  if (b.text or "").startswith("• "))
+    out = await press_on(photo_msg(PRIVATE, kb), active.callback_data)
+    answers = out.find("AnswerCallbackQuery")
+    assert answers and answers[0].get("text") == "Уже показано", answers
+    assert not out.find("EditMessageMedia"), "нечего перерисовывать — правки быть не должно"
+    print("### повторное нажатие активной кнопки: подсказка вместо ошибки ✓")
+
+    # переключение на другую категорию по-прежнему перерисовывает диаграмму
+    other = next(b for row in kb.inline_keyboard for b in row
+                 if b.callback_data and b.callback_data.startswith("s:people"))
+    out = await press_on(photo_msg(PRIVATE, kb), other.callback_data)
+    assert out.find("EditMessageMedia"), "смена среза должна обновлять картинку"
+    print("### смена среза обновляет диаграмму ✓")
+
 
 
     print("\nOK: хендлеры отработали")

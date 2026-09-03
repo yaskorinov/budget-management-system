@@ -1,7 +1,10 @@
 """Статистика: круговые диаграммы и балансы."""
 from __future__ import annotations
 
+from contextlib import suppress
+
 from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandObject
 from aiogram.types import (
     BufferedInputFile,
@@ -13,7 +16,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards, texts
 from app.bot.callbacks import MenuCB, StatsCB
-from app.bot.common import NO_GROUP_HINT, edit_card, resolve_group
+from app.bot.common import (
+    NO_GROUP_HINT,
+    edit_card,
+    group_for_callback,
+    is_private,
+    resolve_group,
+)
 from app.core import periods, reports, service
 from app.db.models import Group, User
 
@@ -33,7 +42,9 @@ async def send_report(
     message: Message, session: AsyncSession, group: Group, mode: str, period: str
 ) -> None:
     report = await reports.build(session, group=group, mode=mode, period=period)
-    markup = keyboards.stats_kb(report.mode, report.period)
+    markup = keyboards.stats_kb(
+        report.mode, report.period, private=message.chat.type == "private"
+    )
 
     if report.is_empty:
         await message.answer(
@@ -95,6 +106,23 @@ async def menu_stats(
     await send_report(callback.message, session, group, "categories", "month")
 
 
+def _already_selected(callback: CallbackQuery, target: StatsCB) -> bool:
+    """Нажали на кнопку, которая и так активна?
+
+    Активные помечены «• ». Перерисовывать нечем: Telegram отклоняет правку
+    неизменившимся содержимым, и пользователь видел бы ложную ошибку.
+    """
+    markup = getattr(callback.message, "reply_markup", None)
+    if markup is None:
+        return False
+    pressed = target.pack()
+    return any(
+        button.callback_data == pressed and (button.text or "").startswith("• ")
+        for row in markup.inline_keyboard
+        for button in row
+    )
+
+
 @router.callback_query(StatsCB.filter())
 async def stats_switch(
     callback: CallbackQuery,
@@ -103,7 +131,11 @@ async def stats_switch(
     user: User,
     bot: Bot,
 ) -> None:
-    group = await service.resolve_active_group(session, user)
+    if _already_selected(callback, callback_data):
+        await callback.answer("Уже показано")
+        return
+
+    group = await group_for_callback(session, callback, user)
     if group is None:
         await callback.answer("Нет активной группы", show_alert=True)
         return
@@ -111,34 +143,43 @@ async def stats_switch(
     report = await reports.build(
         session, group=group, mode=callback_data.mode, period=callback_data.period
     )
-    markup = keyboards.stats_kb(report.mode, report.period)
+    markup = keyboards.stats_kb(report.mode, report.period, private=is_private(callback))
     png = reports.render_png(report) if not report.is_empty else None
 
-    # Сообщение с картинкой правим через media, текстовое — через текст.
-    if png and callback.message and callback.message.photo:
-        await callback.message.edit_media(
-            InputMediaPhoto(
-                media=BufferedInputFile(png, filename=f"stats-{report.mode}.png"),
-                caption=_caption(report),
-            ),
-            reply_markup=markup,
-        )
-    elif png:
-        await callback.message.answer_photo(
-            BufferedInputFile(png, filename=f"stats-{report.mode}.png"),
-            caption=_caption(report),
-            reply_markup=markup,
-        )
-    else:
-        body = (
-            "<i>За этот период расходов нет.</i>"
-            if report.is_empty
-            else f"<code>{reports.render_text(report)}</code>"
-        )
-        text = f"{_caption(report)}\n\n{body}"
-        if callback.message and callback.message.photo:
-            await callback.message.edit_caption(caption=text, reply_markup=markup)
+    message = callback.message
+    was_photo = bool(getattr(message, "photo", None))
+    caption = _caption(report)
+
+    try:
+        if png and was_photo:
+            await message.edit_media(
+                InputMediaPhoto(
+                    media=BufferedInputFile(png, filename=f"stats-{report.mode}.png"),
+                    caption=caption,
+                ),
+                reply_markup=markup,
+            )
+        elif png:
+            # Текстовое сообщение картинкой не станет — заменяем его.
+            with suppress(TelegramBadRequest):
+                await message.delete()
+            await bot.send_photo(
+                message.chat.id,
+                BufferedInputFile(png, filename=f"stats-{report.mode}.png"),
+                caption=caption,
+                reply_markup=markup,
+            )
         else:
-            await edit_card(bot, callback, text, markup)
+            body = (
+                "<i>За этот период расходов нет.</i>"
+                if report.is_empty
+                else f"<code>{reports.render_text(report)}</code>"
+            )
+            # Диаграмму за пустой период оставлять нельзя: старая картинка
+            # с новой подписью выглядит как настоящие данные.
+            await edit_card(bot, callback, f"{caption}\n\n{body}", markup)
+    except TelegramBadRequest as exc:
+        if "message is not modified" not in str(exc):
+            raise
 
     await callback.answer()
