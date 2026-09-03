@@ -25,6 +25,11 @@ ENV PYTHONUNBUFFERED=1 \
     PORT=8080 \
     DATABASE_URL=sqlite+aiosqlite:///./data/expenses.db
 
+# Шрифт с эмодзи: из него берутся иконки внутри сегментов диаграммы
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends fonts-noto-color-emoji \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN useradd --create-home --uid 1000 app
 
 COPY --from=builder /opt/venv /opt/venv

@@ -12,6 +12,7 @@ import logging
 import math
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 
 from app.core import categories as cat
 from app.core.money import format_money
@@ -45,6 +46,7 @@ class Slice:
     label: str
     value: int  # копейки
     color: str
+    icon: str = ""  # эмодзи внутри сегмента; пусто — нарисуем первую букву
 
 
 def fold_slices(items: list[Slice], limit: int = MAX_SLICES, rest_label: str = "Другие") -> list[Slice]:
@@ -54,13 +56,18 @@ def fold_slices(items: list[Slice], limit: int = MAX_SLICES, rest_label: str = "
     if len(items) <= limit:
         return items
     head, tail = items[: limit - 1], items[limit - 1 :]
-    head.append(Slice(rest_label, sum(s.value for s in tail), REST_COLOR))
+    head.append(
+        Slice(rest_label, sum(s.value for s in tail), REST_COLOR, icon="📦")
+    )
     return head
 
 
 def category_slices(rows: list[tuple[str, int]]) -> list[Slice]:
     return fold_slices(
-        [Slice(cat.get(code).title, value, cat.get(code).color) for code, value in rows],
+        [
+            Slice(cat.get(code).title, value, cat.get(code).color, icon=cat.get(code).emoji)
+            for code, value in rows
+        ],
         rest_label="Прочее",
     )
 
@@ -71,6 +78,59 @@ def person_slices(rows: list[tuple[object, int]]) -> list[Slice]:
         for i, (user, value) in enumerate(rows)
     ]
     return fold_slices(slices)
+
+
+EMOJI_FONTS = (
+    "C:/Windows/Fonts/seguiemj.ttf",
+    "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+    "/usr/share/fonts/truetype/noto/NotoEmoji-Regular.ttf",
+    "/System/Library/Fonts/Apple Color Emoji.ttc",
+)
+
+
+@lru_cache(maxsize=1)
+def emoji_font_path() -> str | None:
+    """Шрифт с эмодзи. matplotlib их не рисует — иконки готовим Pillow-ом."""
+    for path in EMOJI_FONTS:
+        if Path(path).exists():
+            return path
+    log.info("Шрифт с эмодзи не найден: в сегментах будут буквы вместо иконок")
+    return None
+
+
+@lru_cache(maxsize=64)
+def _icon_image(char: str, size: int = 128):
+    """Растрит эмодзи в RGBA. None — если шрифта нет или глифа в нём нет."""
+    path = emoji_font_path()
+    if not path:
+        return None
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+
+        try:
+            font = ImageFont.truetype(path, size)
+            scale = 1
+        except OSError:
+            # У цветных шрифтов вроде NotoColorEmoji один фиксированный размер
+            font = ImageFont.truetype(path, 109)
+            scale = size / 109
+
+        canvas = int(size / scale) if scale != 1 else size
+        image = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
+        ImageDraw.Draw(image).text(
+            (canvas / 2, canvas / 2), char, font=font, anchor="mm", embedded_color=True
+        )
+        if scale != 1:
+            image = image.resize((size, size), Image.LANCZOS)
+
+        if not image.getbbox():  # глифа в шрифте нет — вышел пустой квадрат
+            return None
+        import numpy
+
+        return numpy.asarray(image)
+    except Exception as exc:  # pragma: no cover — окружение без Pillow/шрифта
+        log.warning("Не удалось нарисовать иконку %s (%s)", char, exc)
+        return None
 
 
 @lru_cache(maxsize=1)
@@ -109,7 +169,9 @@ DPI = 120
 HEADER_H = 1.15  # заголовок и подзаголовок
 DONUT_H = 4.6
 BOTTOM_H = 0.32
-RING_WIDTH = 0.30  # доля радиуса: тоньше кольцо — просторнее в центре под сумму
+RING_WIDTH = 0.38  # толщина кольца в долях радиуса
+AXIS_LIMIT = 1.22  # запас под подписи процентов снаружи кольца
+SEGMENT_GAP_DEG = 3.0  # зазор между сегментами
 
 CHIP_FONT = 13.5
 CHIP_PAD = 0.62  # доля от кегля, как понимает boxstyle
@@ -170,6 +232,191 @@ def _contrast_ink(hex_color: str) -> str:
     return INK_PRIMARY if on_white > on_black else "#ffffff"
 
 
+def _arc_points(numpy, center, radius, start_angle, end_angle, steps=10, short=False):
+    """Точки дуги вокруг произвольного центра.
+
+    short=True — идти кратчайшим путём: у скруглений угла разница углов должна
+    браться по модулю меньше π, иначе дуга заворачивает в обратную сторону и
+    вместо скругления получается крючок.
+    """
+    if short:
+        delta = (end_angle - start_angle + math.pi) % (2 * math.pi) - math.pi
+        end_angle = start_angle + delta
+    angles = numpy.linspace(start_angle, end_angle, steps)
+    return [
+        (center[0] + radius * math.cos(a), center[1] + radius * math.sin(a))
+        for a in angles
+    ]
+
+
+def _rounded_wedge(numpy, start: float, end: float, inner: float, outer: float, corner: float):
+    """Контур сегмента кольца со скруглёнными углами.
+
+    Обычный клин matplotlib рисуется острыми углами, а круглый конец линии
+    превращает узкий сегмент в «капсулу». Поэтому обводим клин вручную: две
+    дуги, два радиальных отреза и четыре скругления между ними.
+
+    Углы в радианах, start > end (идём по часовой стрелке).
+    """
+    # Скругление не должно съесть сегмент целиком
+    corner = min(corner, (outer - inner) / 2 * 0.9)
+    outer_c, inner_c = outer - corner, inner + corner
+    if outer_c <= 0 or inner_c <= 0:
+        return None
+
+    # На сколько центр скругления отступает от радиального края
+    outer_shift = math.asin(min(1.0, corner / outer_c))
+    inner_shift = math.asin(min(1.0, corner / inner_c))
+    if start - end <= 2 * max(outer_shift, inner_shift):
+        return None  # сегмент уже, чем два скругления
+
+    # Точки касания на радиальных краях
+    outer_foot = math.sqrt(max(outer_c**2 - corner**2, 0.0))
+    inner_foot = math.sqrt(max(inner_c**2 - corner**2, 0.0))
+
+    def polar(radius, angle):
+        return (radius * math.cos(angle), radius * math.sin(angle))
+
+    points: list[tuple[float, float]] = []
+
+    # Внешняя дуга: от начала сегмента к концу
+    a_out, b_out = start - outer_shift, end + outer_shift
+    points += _arc_points(numpy, (0, 0), outer, a_out, b_out, 24)
+
+    # Скругление у внешнего края в конце сегмента
+    c2 = polar(outer_c, b_out)
+    points += _arc_points(
+        numpy, c2, corner,
+        math.atan2(outer * math.sin(b_out) - c2[1], outer * math.cos(b_out) - c2[0]),
+        math.atan2(outer_foot * math.sin(end) - c2[1], outer_foot * math.cos(end) - c2[0]),
+        short=True,
+    )
+
+    # Скругление у внутреннего края в конце сегмента
+    c3 = polar(inner_c, end + inner_shift)
+    points += _arc_points(
+        numpy, c3, corner,
+        math.atan2(inner_foot * math.sin(end) - c3[1], inner_foot * math.cos(end) - c3[0]),
+        math.atan2(inner * math.sin(end + inner_shift) - c3[1],
+                   inner * math.cos(end + inner_shift) - c3[0]),
+        short=True,
+    )
+
+    # Внутренняя дуга обратно
+    a_in, b_in = end + inner_shift, start - inner_shift
+    points += _arc_points(numpy, (0, 0), inner, a_in, b_in, 24)
+
+    # Скругление у внутреннего края в начале сегмента
+    c4 = polar(inner_c, b_in)
+    points += _arc_points(
+        numpy, c4, corner,
+        math.atan2(inner * math.sin(b_in) - c4[1], inner * math.cos(b_in) - c4[0]),
+        math.atan2(inner_foot * math.sin(start) - c4[1], inner_foot * math.cos(start) - c4[0]),
+        short=True,
+    )
+
+    # Скругление у внешнего края в начале сегмента
+    c1 = polar(outer_c, a_out)
+    points += _arc_points(
+        numpy, c1, corner,
+        math.atan2(outer_foot * math.sin(start) - c1[1], outer_foot * math.cos(start) - c1[0]),
+        math.atan2(outer * math.sin(a_out) - c1[1], outer * math.cos(a_out) - c1[0]),
+        short=True,
+    )
+
+    return points
+
+
+def _draw_ring(ax, slices: list[Slice], total: int) -> None:
+    """Кольцо из толстых сегментов со скруглёнными углами."""
+    import numpy
+    from matplotlib.patches import Circle, Polygon
+
+    outer, inner = 1.0, 1.0 - RING_WIDTH
+    band = (outer + inner) / 2
+    corner = RING_WIDTH * 0.20  # мягкое скругление; сильнее — короткие доли превращаются в кляксы
+
+    ax.set_xlim(-AXIS_LIMIT, AXIS_LIMIT)
+    ax.set_ylim(-AXIS_LIMIT, AXIS_LIMIT)
+    ax.set_axis_off()
+
+    single = len(slices) == 1
+    start = 90.0
+    for item in slices:
+        span = item.value / total * 360
+        end = start - span  # по часовой стрелке
+
+        if single:
+            ax.add_artist(
+                Circle(
+                    (0, 0), band, fill=False, edgecolor=item.color, zorder=2,
+                    linewidth=RING_WIDTH * DONUT_H * 72 / (2 * AXIS_LIMIT),
+                )
+            )
+        else:
+            gap = SEGMENT_GAP_DEG / 2
+            outline = _rounded_wedge(
+                numpy,
+                math.radians(start - gap),
+                math.radians(end + gap),
+                inner,
+                outer,
+                corner,
+            )
+            if outline is None:
+                # Слишком узкая доля: рисуем её кружком, иначе она пропадёт
+                middle = math.radians((start + end) / 2)
+                ax.add_artist(
+                    Circle(
+                        (band * math.cos(middle), band * math.sin(middle)),
+                        RING_WIDTH / 2 * 0.8,
+                        facecolor=item.color, edgecolor="none", zorder=2,
+                    )
+                )
+            else:
+                ax.add_patch(
+                    Polygon(outline, closed=True, facecolor=item.color,
+                            edgecolor="none", zorder=2)
+                )
+
+        _draw_segment_marks(ax, item, start, end, band, total)
+        start = end
+
+
+def _draw_segment_marks(ax, item: Slice, start: float, end: float, band: float, total: int) -> None:
+    """Иконка внутри сегмента и процент снаружи кольца."""
+    share = item.value / total
+    middle = math.radians((start + end) / 2)
+    x, y = math.cos(middle), math.sin(middle)
+
+    # Иконка помещается, только если сегмент не совсем узкий
+    if share >= 0.07:
+        icon = _icon_image(item.icon) if item.icon else None
+        if icon is not None:
+            from matplotlib.offsetbox import AnnotationBbox, OffsetImage
+
+            band_px = RING_WIDTH * DONUT_H * DPI / (2 * AXIS_LIMIT)
+            target_px = band_px * 0.52
+            box = OffsetImage(icon, zoom=target_px * 72 / (len(icon) * DPI))
+            ax.add_artist(
+                AnnotationBbox(box, (band * x, band * y), frameon=False, zorder=3)
+            )
+        else:
+            ax.text(
+                band * x, band * y, item.label[:1].upper(),
+                ha="center", va="center", zorder=3,
+                color=_contrast_ink(item.color), fontsize=17, fontweight="bold",
+            )
+
+    if share >= 0.03:
+        outside = 1 + 0.09
+        ax.text(
+            outside * x, outside * y, f"{share * 100:.0f}%",
+            ha="center", va="center",
+            color=INK_SECONDARY, fontsize=12.5, fontweight="bold",
+        )
+
+
 def render_donut(
     *,
     title: str,
@@ -226,36 +473,10 @@ def render_donut(
     )
     ax.set_facecolor(SURFACE)
 
-    wedges, _ = ax.pie(
-        [s.value for s in slices],
-        colors=[s.color for s in slices],
-        startangle=90,
-        counterclock=False,
-        # Заметный зазор между сегментами: кольцо читается как набор отдельных
-        # долей, а не как сплошное пятно
-        wedgeprops={"width": RING_WIDTH, "edgecolor": SURFACE, "linewidth": 7},
-    )
-    ax.set(aspect="equal")
-
-    band = 1 - RING_WIDTH / 2  # середина кольца
-    for wedge, item in zip(wedges, slices):
-        share = item.value / total
-        if share < 0.045:  # в узкой доле подпись не читается
-            continue
-        angle = math.radians((wedge.theta2 + wedge.theta1) / 2)
-        ax.text(
-            band * math.cos(angle),
-            band * math.sin(angle),
-            f"{share * 100:.0f}%",
-            ha="center",
-            va="center",
-            color=_contrast_ink(item.color),
-            fontsize=13,
-            fontweight="bold",
-        )
+    _draw_ring(ax, slices, total)
 
     ax.text(0, 0.09, format_money(total, symbol), ha="center", va="center",
-            color=INK_PRIMARY, fontsize=21, fontweight="bold")
+            color=INK_PRIMARY, fontsize=19, fontweight="bold")
     ax.text(0, -0.14, total_caption, ha="center", va="center",
             color=INK_MUTED, fontsize=12.5)
 
