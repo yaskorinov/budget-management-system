@@ -163,7 +163,7 @@ def stats_caption(*, group_title: str, mode: str, period_title: str, total: int)
 def help_text(bot_username: str | None = None) -> str:
     mention = f"@{bot_username}" if bot_username else "@бот"
     web_line = (
-        f"\n🌐 <b>Веб-версия</b>: /web — ссылка на мини-аппу, она же открывается "
+        f"\n🌐 <b>Веб-версия</b>: /web в личке — одноразовая ссылка на мини-аппу, она же открывается "
         f"в обычном браузере.\n"
         if settings.web_enabled
         else ""

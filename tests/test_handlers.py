@@ -12,6 +12,7 @@ if db.exists(): db.unlink()
 os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{db.as_posix()}"
 os.environ["LLM_PROVIDER"] = "off"
 os.environ["BOT_TOKEN"] = "123456:AAHtesttoken"
+os.environ["PUBLIC_BASE_URL"] = "https://budget.example.com"
 
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
@@ -285,6 +286,39 @@ async def main():
     out = await press_on(photo_msg(PRIVATE, kb), other.callback_data)
     assert out.find("EditMessageMedia"), "смена среза должна обновлять картинку"
     print("### смена среза обновляет диаграмму ✓")
+
+    # ---- /web выдаёт ссылку входа только в личке ----
+    from sqlalchemy import func, select
+
+    from app.db.base import session_scope
+    from app.db.models import WebLoginToken
+
+    async def tokens_issued() -> int:
+        async with session_scope() as db:
+            return int(await db.scalar(select(func.count(WebLoginToken.id))) or 0)
+
+    before = await tokens_issued()
+    out = await send("/web", ANYA, GROUP)
+    show("/web в группе", out)
+    assert await tokens_issued() == before, "в группе токен создаваться не должен"
+    assert not any("login=" in text for text in out), "ссылка входа утекла в общий чат"
+    button = session.find("SendMessage")[-1]["reply_markup"]["inline_keyboard"][0][0]
+    assert button["url"].endswith("?start=web"), button
+    print("\n### /web в группе: ни токена, ни ссылки — только кнопка в личку ✓")
+
+    out = await send("/web", ANYA, PRIVATE)
+    assert await tokens_issued() == before + 1, "в личке ссылка должна выдаваться"
+    assert any("login=" in text for text in out), out
+    print("### /web в личке выдаёт ссылку ✓")
+
+    # диплинк из кнопки: /start web в личке — ссылка, в группе — обычный join
+    out = await send("/start web", ANYA, PRIVATE)
+    assert await tokens_issued() == before + 2 and any("login=" in t for t in out)
+    out = await send("/start web", ANYA, GROUP)
+    assert await tokens_issued() == before + 2, "диплинк в группе не должен выдавать токен"
+    assert not any("login=" in text for text in out), "ссылка утекла через /start web"
+    print("### диплинк /start web: ссылка только в личке ✓")
+
 
 
 

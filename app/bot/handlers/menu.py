@@ -5,7 +5,12 @@ from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards, texts
@@ -77,9 +82,16 @@ async def join_group_chat(message: Message, session: AsyncSession, user: User) -
 
 @router.message(CommandStart())
 async def start_private(
-    message: Message, session: AsyncSession, user: User, state: FSMContext
+    message: Message,
+    command: CommandObject,
+    session: AsyncSession,
+    user: User,
+    state: FSMContext,
 ) -> None:
     await state.clear()
+    if (command.args or "").strip() == "web":
+        await send_login_link(message, session, user)
+        return
     text, markup = await render_home(session, user)
     await message.answer(text, reply_markup=markup)
 
@@ -160,20 +172,50 @@ async def leave_command(message: Message, session: AsyncSession, user: User) -> 
     )
 
 
-@router.message(Command("web"))
-async def web_command(message: Message, session: AsyncSession, user: User) -> None:
+async def send_login_link(message: Message, session: AsyncSession, user: User) -> None:
+    """Выдаёт одноразовую ссылку входа. Только в личке — см. web_command_in_group."""
     if not settings.web_enabled:
         await message.answer(
             "Веб-версия не настроена: в .env нужен PUBLIC_BASE_URL с https."
         )
         return
+
     token = await service.create_login_token(session, user.id)
-    link = f"{settings.public_base}/?login={token}"
     await message.answer(
-        "🌐 Ссылка для входа в веб-версию (одноразовая, действует 15 минут):\n"
-        f"{link}\n\n"
-        "Открывается в любом браузере и как мини-аппа в Telegram.",
+        "🌐 Ссылка для входа в веб-версию — одноразовая, действует 15 минут:\n"
+        f"{settings.public_base}/?login={token}\n\n"
+        "Открывается в любом браузере и как мини-аппа в Telegram.\n"
+        "<i>Никому её не пересылайте: она пускает в ваш аккаунт без пароля.</i>",
         disable_web_page_preview=True,
+    )
+
+
+@router.message(Command("web"), F.chat.type == "private")
+async def web_command(message: Message, session: AsyncSession, user: User) -> None:
+    await send_login_link(message, session, user)
+
+
+@router.message(Command("web"))
+async def web_command_in_group(message: Message, bot: Bot) -> None:
+    """В общем чате ссылку не выдаём и токен не создаём.
+
+    Ссылка пускает в аккаунт того, кто набрал команду, без пароля — в группе
+    по ней вошёл бы любой, кто нажмёт первым.
+    """
+    me = await bot.me()
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Открыть бота", url=f"https://t.me/{me.username}?start=web"
+                )
+            ]
+        ]
+    )
+    await message.reply(
+        "🔒 Ссылку для входа выдаю только в личных сообщениях: в общем чате "
+        "по ней мог бы зайти в ваш аккаунт кто угодно.",
+        reply_markup=keyboard,
     )
 
 
