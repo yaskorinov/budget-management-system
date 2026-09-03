@@ -50,11 +50,11 @@ NO_GROUP_HINT = texts.blocks(
     texts.bullets(
         texts.join(
             "Добавьте бота в общий чат и отправьте там ",
-            texts.code("/join"),
+            texts.cmd("/join"),
             " — бюджет создастся сам",
         ),
         texts.join(
-            "Либо заведите его прямо здесь: ", texts.code("/newgroup Название")
+            "Либо заведите его прямо здесь: ", texts.cmd("/newgroup Название")
         ),
     ),
 )

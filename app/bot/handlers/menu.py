@@ -48,7 +48,7 @@ async def render_home(
         texts.summary_text(data),
     )
     if len(groups) > 1:
-        text = texts.lines(text, texts.italic("Сменить бюджет: /groups"))
+        text = texts.blocks(text, texts.italic("Сменить бюджет: /groups"))
     return text, keyboards.main_menu(web_app_url=web_app_url() if private else None)
 
 
@@ -87,10 +87,10 @@ async def join_group_chat(message: Message, session: AsyncSession, user: User) -
             texts.join("👥 Участники (", str(len(members)), "): ", names),
             texts.bold("Дальше"),
             texts.bullets(
-                texts.join(texts.code("/add 5000"), " — взнос в фонд"),
-                texts.join(texts.code("/buy молоко хлеб 850"), " — покупка"),
-                texts.join(texts.code("/join"), " — остальным, чтобы попасть в расчёты"),
-                texts.join(texts.code("/help"), " — всё остальное"),
+                texts.join(texts.cmd("/add 5000"), " — взнос в фонд"),
+                texts.join(texts.cmd("/buy молоко хлеб 850"), " — покупка"),
+                texts.join(texts.cmd("/join"), " — остальным, чтобы попасть в расчёты"),
+                texts.join(texts.cmd("/help"), " — всё остальное"),
             ),
         ),
     )
@@ -126,7 +126,7 @@ async def new_group(
     title = (command.args or "").strip()
     if not title:
         await answer_rich(message, 
-            texts.join("Укажите название: ", texts.code("/newgroup Квартира на Лесной"))
+            texts.join("Укажите название: ", texts.cmd("/newgroup Квартира на Лесной"))
         )
         return
     group = await service.create_group(session, title=title, owner=user)
@@ -138,7 +138,7 @@ async def new_group(
                 texts.lines(
                     texts.join(
                         "Чтобы подключить остальных, добавьте бота в общий чат ",
-                        "и отправьте там ", texts.code("/join"), ".",
+                        "и отправьте там ", texts.cmd("/join"), ".",
                     ),
                     texts.join("Бюджет уже выбран активным."),
                 )

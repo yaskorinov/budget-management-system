@@ -39,6 +39,15 @@ def signed(cents: int) -> str:
     return ("+" if cents > 0 else "") + money(cents)
 
 
+def cmd(command: str) -> Rich:
+    """Команда обычным текстом.
+
+    В моноширинном виде Telegram не распознаёт её как команду: по такой не
+    нажать, приходится копировать и отправлять руками.
+    """
+    return esc(command)
+
+
 def plain(*parts: object) -> str:
     """Текст без разметки — для подписей к фото и всплывающих подсказок."""
     return "".join(str(part) for part in parts)
@@ -274,12 +283,12 @@ def help_text(bot_username: str | None = None) -> Rich:
         table(
             ["Команда", "Что делает"],
             [
-                [code("/add 5000"), "взнос в фонд"],
-                [code("/buy молоко хлеб 850"), "покупка"],
-                [code("/balance"), "балансы участников"],
-                [code("/stats категории"), "круговая диаграмма"],
-                [code("/ops"), "последние операции"],
-                [code("/join"), "присоединиться к бюджету чата"],
+                [cmd("/add 5000"), "взнос в фонд"],
+                [cmd("/buy молоко хлеб 850"), "покупка"],
+                [cmd("/balance"), "балансы участников"],
+                [cmd("/stats категории"), "круговая диаграмма"],
+                [cmd("/ops"), "последние операции"],
+                [cmd("/join"), "присоединиться к бюджету чата"],
             ],
         ),
         heading(2, "В любом чате — inline"),
@@ -299,7 +308,7 @@ def help_text(bot_username: str | None = None) -> Rich:
         parts.append(heading(2, "Веб-версия"))
         parts.append(
             bullets(
-                join(code("/web"), " в личке — одноразовая ссылка на мини-аппу"),
+                join(cmd("/web"), " в личке — одноразовая ссылка на мини-аппу"),
                 "Она же открывается в обычном браузере",
             )
         )
