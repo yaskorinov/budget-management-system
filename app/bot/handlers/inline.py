@@ -125,7 +125,7 @@ async def _stats_results(
             result_id=f"stats-text-{report.mode}-{report.period}",
             title=f"📊 Расходы {reports.MODES[report.mode]}",
             description=f"{report.period_title}, {format_money(report.total)}",
-            text=f"{caption}\n\n<code>{reports.render_text(report)}</code>",
+            text=f"{caption}\n\n{texts.pre(reports.render_text(report))}",
         )
     ]
 
@@ -310,8 +310,9 @@ async def _render_committed(session: AsyncSession, operation) -> tuple[str, obje
     group = await session.get(Group, operation.group_id)
     members = await service.group_members(session, operation.group_id)
     data = await service.summary(session, group=group)
-    card = texts.operation_card(operation, group=group, members_total=len(members))
-    card += f"\n\n💼 В фонде: <b>{texts.money(data.fund_left)}</b>"
+    card = texts.operation_card(
+        operation, group=group, members_total=len(members), fund_left=data.fund_left
+    )
     return card, keyboards.operation_kb(operation, compact=True)
 
 

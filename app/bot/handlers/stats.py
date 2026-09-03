@@ -56,7 +56,7 @@ async def send_report(
     png = reports.render_png(report)
     if png is None:
         await message.answer(
-            f"{_caption(report)}\n\n<code>{reports.render_text(report)}</code>",
+            f"{_caption(report)}\n\n{texts.pre(reports.render_text(report))}",
             reply_markup=markup,
         )
         return
@@ -173,7 +173,7 @@ async def stats_switch(
             body = (
                 "<i>За этот период расходов нет.</i>"
                 if report.is_empty
-                else f"<code>{reports.render_text(report)}</code>"
+                else texts.pre(reports.render_text(report))
             )
             # Диаграмму за пустой период оставлять нельзя: старая картинка
             # с новой подписью выглядит как настоящие данные.

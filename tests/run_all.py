@@ -7,7 +7,7 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-TESTS = ["test_core.py", "test_api.py", "test_handlers.py"]
+TESTS = ["test_core.py", "test_texts.py", "test_api.py", "test_handlers.py"]
 
 
 def main() -> int:

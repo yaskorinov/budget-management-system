@@ -183,17 +183,28 @@ def render_donut(
 
 
 def render_text_stats(slices: list[Slice], symbol: str = "₽") -> str:
-    """Текстовая версия — для inline-подсказок и когда графика недоступна."""
-    slices = [s for s in slices if s.value > 0]
+    """Текстовая версия диаграммы — колонки выровнены под моноширинный блок."""
+    slices = [item for item in slices if item.value > 0]
     if not slices:
         return "Пока нет расходов за этот период."
-    total = sum(s.value for s in slices)
-    lines = []
-    for item in slices:
-        share = item.value / total
-        bar = "█" * max(1, round(share * 12))
-        lines.append(
-            f"{bar} {item.label} — {format_money(item.value, symbol)} ({share * 100:.0f}%)"
+
+    total = sum(item.value for item in slices)
+    rows = [
+        (
+            item.label,
+            format_money(item.value, symbol),
+            f"{item.value / total * 100:.0f}%",
+            "█" * max(1, round(item.value / total * 10)),
         )
-    lines.append(f"Итого: {format_money(total, symbol)}")
+        for item in slices
+    ]
+    label_width = max(len(row[0]) for row in rows)
+    money_width = max(len(row[1]) for row in rows)
+
+    lines = [
+        f"{label:<{label_width}}  {amount:>{money_width}}  {share:>4}  {bar}"
+        for label, amount, share, bar in rows
+    ]
+    lines.append("")
+    lines.append(f"{'Итого':<{label_width}}  {format_money(total, symbol):>{money_width}}")
     return "\n".join(lines)

@@ -26,21 +26,35 @@ def signed(cents: int) -> str:
     return ("+" if cents > 0 else "") + money(cents)
 
 
+
+def quote(body: str, *, expandable: bool = False) -> str:
+    """Цитата Telegram: сворачиваемая — для длинных списков."""
+    tag = "<blockquote expandable>" if expandable else "<blockquote>"
+    return f"{tag}{body}</blockquote>"
+
+
+def pre(body: str) -> str:
+    """Моноширинный блок: только в нём колонки выстраиваются ровно."""
+    return f"<pre>{escape(body, quote=False)}</pre>"
+
+
 def operation_line(operation: Operation) -> str:
-    """Одна строка для списков операций."""
+    """Две строки для списка операций."""
     when = periods.format_date(operation.occurred_at)
     who = esc(operation.author.short_name)
+
     if operation.is_purchase:
         category = cat.get(operation.category)
-        return (
-            f"<code>#{operation.id}</code> {category.emoji} <b>{money(operation.amount)}</b> — "
-            f"{esc(operation.title or category.title)}\n"
-            f"      <i>{category.title} · {who} · {when}</i>"
+        head = (
+            f"{category.emoji} <b>{money(operation.amount)}</b> · "
+            f"{esc(operation.title or category.title)}"
         )
-    return (
-        f"<code>#{operation.id}</code> 💰 <b>{money(operation.amount)}</b> — взнос в фонд\n"
-        f"      <i>{who} · {when}</i>"
-    )
+        tail = f"<i>#{operation.id} · {category.title} · {who} · {when}</i>"
+    else:
+        head = f"💰 <b>{money(operation.amount)}</b> · взнос в фонд"
+        tail = f"<i>#{operation.id} · {who} · {when}</i>"
+
+    return f"{head}\n{tail}"
 
 
 def operation_card(
@@ -49,39 +63,47 @@ def operation_card(
     group: Group | None = None,
     header: str | None = None,
     members_total: int | None = None,
+    fund_left: int | None = None,
 ) -> str:
-    """Карточка операции с кнопками правки."""
-    lines: list[str] = []
-    where = f" · {esc(group.title)}" if group else ""
+    """Карточка операции: заголовок с суммой, подробности — в цитате."""
+    facts: list[str] = []
 
     if operation.is_purchase:
         category = cat.get(operation.category)
-        lines.append(header or f"{category.emoji} <b>Покупка записана</b>{where}")
-        lines.append(f"<b>{money(operation.amount)}</b> — {esc(operation.title or category.title)}")
+        title = esc(operation.title or category.title)
+        head = header or (
+            f"{category.emoji} <b>{title}</b> — <b>{money(operation.amount)}</b>"
+        )
 
-        parts = len(operation.shares)
-        if parts:
-            per_person = operation.shares[0].amount
+        origin = {
+            "llm": "определил ИИ",
+            "manual": "выбрана вручную",
+        }.get(operation.category_source or "", "по ключевым словам")
+        facts.append(f"🏷 {category.title} · <i>{origin}</i>")
+
+        if operation.shares:
+            parts = len(operation.shares)
+            per_person = money(operation.shares[0].amount)
             names = ", ".join(esc(share.user.short_name) for share in operation.shares)
             if members_total is not None and parts < members_total:
-                lines.append(f"Делится на {parts}: {names} — по {money(per_person)}")
+                facts.append(f"👥 Делим на {parts} по {per_person} · {names}")
             else:
-                lines.append(f"Делится на {parts} — по {money(per_person)}")
-
-        source = {"llm": "категория определена ИИ", "manual": "категория задана вручную"}
-        hint = source.get(operation.category_source or "", "категория по ключевым словам")
-        lines.append(f"<i>{category.title} · {hint}</i>")
+                facts.append(f"👥 Делим на {parts} поровну — по {per_person}")
     else:
-        lines.append(header or f"💰 <b>Взнос в фонд</b>{where}")
-        lines.append(f"<b>{money(operation.amount)}</b> · {esc(operation.author.short_name)}")
+        head = header or f"💰 <b>Взнос в фонд</b> — <b>{money(operation.amount)}</b>"
         if operation.title:
-            lines.append(f"<i>{esc(operation.title)}</i>")
+            facts.append(f"📝 {esc(operation.title)}")
 
-    lines.append(
-        f"<i>{esc(operation.author.short_name)} · "
-        f"{periods.format_date(operation.occurred_at)} · #{operation.id}</i>"
+    where = f" · {esc(group.title)}" if group else ""
+    facts.append(
+        f"✍️ {esc(operation.author.short_name)} · "
+        f"{periods.format_date(operation.occurred_at)}{where} · <code>#{operation.id}</code>"
     )
-    return "\n".join(lines)
+
+    card = f"{head}\n{quote(chr(10).join(facts))}"
+    if fund_left is not None:
+        card += f"\n💼 В фонде: <b>{money(fund_left)}</b>"
+    return card
 
 
 def draft_card(
@@ -94,101 +116,119 @@ def draft_card(
     category_source: str = "rules",
     author_name: str = "",
 ) -> str:
-    """Черновик из inline-режима — до подтверждения."""
+    """Черновик из inline-режима — до подтверждения кнопкой."""
+    facts: list[str] = []
+
     if kind == "contribution":
-        head = f"💰 <b>Взнос в фонд</b> · {esc(group_title)}"
-        body = f"<b>{money(amount)}</b>"
+        head = f"💰 <b>Взнос в фонд</b> — <b>{money(amount)}</b>"
     else:
         category_obj = cat.get(category)
-        head = f"{category_obj.emoji} <b>Покупка</b> · {esc(group_title)}"
-        hint = "определил ИИ" if category_source == "llm" else "по ключевым словам"
-        body = (
-            f"<b>{money(amount)}</b> — {esc(title)}\n"
-            f"<i>{category_obj.title} ({hint})</i>"
-        )
+        head = f"{category_obj.emoji} <b>{esc(title)}</b> — <b>{money(amount)}</b>"
+        origin = "определил ИИ" if category_source == "llm" else "по ключевым словам"
+        if category_source == "manual":
+            origin = "выбрана вручную"
+        facts.append(f"🏷 {category_obj.title} · <i>{origin}</i>")
 
-    who = f"\n<i>{esc(author_name)}</i>" if author_name else ""
-    return f"{head}\n{body}{who}\n\n<i>⏳ Черновик — подтвердите кнопкой ниже.</i>"
+    facts.append(f"💼 {esc(group_title)}")
+    if author_name:
+        facts.append(f"✍️ {esc(author_name)}")
+
+    return f"{head}\n{quote(chr(10).join(facts))}\n⏳ <i>Черновик — подтвердите кнопкой ниже.</i>"
 
 
 def summary_text(data: GroupSummary, *, with_header: bool = True) -> str:
-    lines: list[str] = []
-    if with_header:
-        lines.append(f"<b>{esc(data.group.title)}</b>")
-    lines.append(f"Осталось в фонде: <b>{money(data.fund_left)}</b>")
-    lines.append(
-        f"Внесено: {money(data.total_contributed)} · "
-        f"Потрачено: {money(data.total_spent)}"
-    )
+    head = f"💼 <b>{esc(data.group.title)}</b>\n" if with_header else ""
+    lines = [
+        f"{head}Осталось в фонде: <b>{money(data.fund_left)}</b>",
+        quote(
+            f"Внесено: {money(data.total_contributed)}\n"
+            f"Потрачено: {money(data.total_spent)}"
+        ),
+    ]
 
-    if data.members:
-        lines.append("")
-        lines.append("<b>Балансы</b>")
-        for item in data.members:
-            mark = "🟢" if item.balance > 0 else ("🔴" if item.balance < 0 else "⚪️")
-            lines.append(
-                f"{mark} {esc(item.user.short_name)}: <b>{signed(item.balance)}</b>"
-                f"  <i>(внёс {money(item.contributed)}, доля {money(item.spent)})</i>"
-            )
-        debtors = [item for item in data.members if item.balance < 0]
-        if debtors:
-            lines.append("")
-            lines.append(
-                "🔴 нужно доложить в фонд: "
-                + ", ".join(
-                    f"{esc(i.user.short_name)} — {money(-i.balance)}" for i in debtors
-                )
-            )
-    else:
+    if not data.members:
         lines.append("\n<i>Пока нет ни одной операции.</i>")
+        return "\n".join(lines)
+
+    rows = []
+    for item in data.members:
+        mark = "🟢" if item.balance > 0 else ("🔴" if item.balance < 0 else "⚪️")
+        rows.append(
+            f"{mark} {esc(item.user.short_name)} — <b>{signed(item.balance)}</b>\n"
+            f"<i>вклад {money(item.contributed)} · доля {money(item.spent)}</i>"
+        )
+
+    lines.append(f"\n<b>Балансы</b>\n{quote(chr(10).join(rows))}")
+
+    debtors = [item for item in data.members if item.balance < 0]
+    if debtors:
+        who = " · ".join(
+            f"{esc(item.user.short_name)} {money(-item.balance)}" for item in debtors
+        )
+        lines.append(f"🔴 <b>Нужно доложить:</b> {who}")
 
     return "\n".join(lines)
 
 
 def operations_text(operations: list[Operation], *, title: str, empty: str) -> str:
     if not operations:
-        return f"<b>{title}</b>\n\n<i>{empty}</i>"
+        return f"{title}\n\n<i>{empty}</i>"
     body = "\n".join(operation_line(operation) for operation in operations)
-    return f"<b>{title}</b>\n\n{body}"
+    # Длинный список сворачиваем, чтобы он не занимал весь экран.
+    return f"{title}\n{quote(body, expandable=len(operations) > 4)}"
 
 
 def stats_caption(*, group_title: str, mode: str, period_title: str, total: int) -> str:
     what = "по категориям" if mode == "categories" else "по людям"
     return (
-        f"📊 <b>Расходы {what}</b> · {esc(group_title)}\n"
-        f"{period_title}, всего {money(total)}"
+        f"📊 <b>Расходы {what}</b>\n"
+        f"<i>{esc(group_title)} · {period_title}</i>\n"
+        f"Всего: <b>{money(total)}</b>"
     )
 
 
 def help_text(bot_username: str | None = None) -> str:
     mention = f"@{bot_username}" if bot_username else "@бот"
-    web_line = (
-        f"\n🌐 <b>Веб-версия</b>: /web в личке — одноразовая ссылка на мини-аппу, она же открывается "
-        f"в обычном браузере.\n"
-        if settings.web_enabled
-        else ""
-    )
-    return (
-        "<b>Общий бюджет: как пользоваться</b>\n\n"
+    blocks = [
+        "💼 <b>Общий бюджет</b>",
         "Все скидываются в общий фонд, покупки списываются из него. "
-        "У каждого свой баланс: сколько внёс минус его доля расходов.\n\n"
-        "<b>В личке</b> — кнопки меню: внести, записать покупку, статистика, "
-        "правка своих операций.\n\n"
-        "<b>В группе</b>\n"
-        "/add 5000 — взнос в фонд\n"
-        "/buy молоко хлеб 850 — покупка (категорию определит ИИ)\n"
-        "/balance — балансы участников\n"
-        "/stats категории | /stats люди — круговая диаграмма\n"
-        "/ops — последние операции\n"
-        "/join — присоединиться к бюджету этого чата\n"
-        "Можно и без команд: «внёс 5000», «купил молоко 850».\n\n"
-        "<b>Инлайн — в любом чате</b>\n"
-        f"<code>{mention} 850 молоко хлеб</code> — покупка\n"
-        f"<code>{mention} внёс 5000</code> — взнос\n"
-        f"<code>{mention} стата категории</code> — диаграмма по категориям\n"
-        f"<code>{mention} стата люди</code> — диаграмма по людям\n"
-        f"<code>{mention} баланс</code> — текущие балансы\n"
-        f"{web_line}"
-        "\nЛюбую свою операцию можно поправить или удалить кнопками на её карточке "
-        "или через /ops."
+        "Баланс каждого — сколько внёс минус его доля расходов.",
+        "",
+        "<b>В личке</b>",
+        quote(
+            "Кнопки меню: внести, записать покупку, статистика, свои операции.\n"
+            "Можно и текстом: <code>молоко хлеб 850</code>"
+        ),
+        "<b>В группе</b>",
+        quote(
+            "<code>/add 5000</code> — взнос в фонд\n"
+            "<code>/buy молоко хлеб 850</code> — покупка\n"
+            "<code>/balance</code> — балансы участников\n"
+            "<code>/stats категории</code> — диаграмма\n"
+            "<code>/ops</code> — последние операции\n"
+            "<code>/join</code> — присоединиться к бюджету чата"
+        ),
+        "<b>В любом чате — inline</b>",
+        quote(
+            f"<code>{mention} 850 молоко хлеб</code> — покупка\n"
+            f"<code>{mention} внёс 5000</code> — взнос\n"
+            f"<code>{mention} стата категории</code> — диаграмма\n"
+            f"<code>{mention} стата люди</code> — по людям\n"
+            f"<code>{mention} баланс</code> — балансы"
+        ),
+    ]
+
+    if settings.web_enabled:
+        blocks.append("<b>Веб-версия</b>")
+        blocks.append(
+            quote(
+                "<code>/web</code> в личке — одноразовая ссылка на мини-аппу.\n"
+                "Она же открывается в обычном браузере."
+            )
+        )
+
+    blocks.append(
+        "<i>Свою операцию можно поправить или удалить кнопками на её карточке "
+        "или через </i><code>/ops</code><i>.</i>"
     )
+    return "\n".join(blocks)

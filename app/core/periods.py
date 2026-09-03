@@ -72,4 +72,15 @@ def bounds(name: str | None) -> tuple[dt.datetime | None, dt.datetime | None, st
 
 
 def format_date(moment: dt.datetime) -> str:
-    return to_local(moment).strftime("%d.%m %H:%M")
+    """Свежие даты читаются словами, старые — числом: «сегодня 21:40»."""
+    local = to_local(moment)
+    today = dt.datetime.now(TZ).replace(tzinfo=None).date()
+    delta = (today - local.date()).days
+
+    if delta == 0:
+        return f"сегодня {local:%H:%M}"
+    if delta == 1:
+        return f"вчера {local:%H:%M}"
+    if local.year == today.year:
+        return f"{local:%d.%m} в {local:%H:%M}"
+    return f"{local:%d.%m.%Y}"

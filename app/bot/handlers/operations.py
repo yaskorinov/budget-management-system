@@ -39,12 +39,10 @@ async def render_operations(
         session, group_id=group.id, author_id=author_id, limit=PAGE, offset=offset
     )
     total = await service.count_operations(session, group_id=group.id, author_id=author_id)
-    title = (
-        f"📒 {'Мои операции' if scope == 'mine' else 'Операции группы'} · "
-        f"{texts.esc(group.title)}"
-    )
+    heading = "Мои операции" if scope == "mine" else "Операции группы"
+    title = f"📒 <b>{heading}</b> · <i>{texts.esc(group.title)}</i>"
     if total:
-        title += f" ({offset + 1}–{offset + len(operations)} из {total})"
+        title += f"\n<i>{offset + 1}–{offset + len(operations)} из {total}</i>"
 
     text = texts.operations_text(
         operations,

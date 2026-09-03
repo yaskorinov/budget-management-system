@@ -67,16 +67,21 @@ async def join_group_chat(message: Message, session: AsyncSession, user: User) -
         )
         return
 
-    head = (
-        f"✅ Бюджет «{texts.esc(group.title)}» подключён к этому чату."
-        if len(members) == 1
-        else f"✅ {texts.esc(user.short_name)} в деле — бюджет «{texts.esc(group.title)}»."
-    )
+    if len(members) == 1:
+        head = f"✅ <b>Бюджет «{texts.esc(group.title)}» подключён к этому чату</b>"
+    else:
+        head = f"✅ <b>{texts.esc(user.short_name)} в деле</b> — «{texts.esc(group.title)}»"
+
     await message.answer(
         f"{head}\n"
-        f"Участники ({len(members)}): {names}\n\n"
-        "Остальные — отправьте /join, чтобы попасть в расчёты.\n"
-        "Дальше: /add 5000 — взнос, /buy молоко 850 — покупка, /help — всё остальное."
+        + texts.quote(f"👥 Участники ({len(members)}): {names}")
+        + "\n<b>Дальше</b>\n"
+        + texts.quote(
+            "<code>/add 5000</code> — взнос в фонд\n"
+            "<code>/buy молоко хлеб 850</code> — покупка\n"
+            "<code>/join</code> — остальным, чтобы попасть в расчёты\n"
+            "<code>/help</code> — всё остальное"
+        )
     )
 
 
@@ -92,6 +97,7 @@ async def start_private(
     if (command.args or "").strip() == "web":
         await send_login_link(message, session, user)
         return
+
     text, markup = await render_home(session, user)
     await message.answer(text, reply_markup=markup)
 

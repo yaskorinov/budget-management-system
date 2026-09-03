@@ -42,6 +42,11 @@ def source_for(message: Message) -> str:
     return "group" if message.chat.type in GROUP_CHATS else "dm"
 
 
+def card_group(message: Message, group: Group) -> Group | None:
+    """В самом чате бюджета его название подписывать не нужно — и так ясно."""
+    return None if message.chat.type in GROUP_CHATS else group
+
+
 async def ask_for_input(
     message: Message,
     state: FSMContext,
@@ -82,8 +87,7 @@ async def record_contribution(
     )
     data = await service.summary(session, group=group)
     await message.answer(
-        texts.operation_card(operation, group=group)
-        + f"\n\n💼 В фонде: <b>{texts.money(data.fund_left)}</b>",
+        texts.operation_card(operation, group=card_group(message, group), fund_left=data.fund_left),
         reply_markup=keyboards.operation_kb(operation, compact=True),
     )
 
@@ -120,8 +124,12 @@ async def record_purchase(
     members = await service.group_members(session, group.id)
     data = await service.summary(session, group=group)
     await message.answer(
-        texts.operation_card(operation, group=group, members_total=len(members))
-        + f"\n\n💼 В фонде: <b>{texts.money(data.fund_left)}</b>",
+        texts.operation_card(
+            operation,
+            group=card_group(message, group),
+            members_total=len(members),
+            fund_left=data.fund_left,
+        ),
         reply_markup=keyboards.operation_kb(operation, compact=True),
     )
 

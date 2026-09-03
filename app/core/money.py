@@ -84,7 +84,7 @@ def to_cents(value: float | int | str) -> int:
 
 def format_money(cents: int, symbol: str = "₽") -> str:
     """1234567 -> '12 345,67 ₽'; целые суммы — без копеек."""
-    sign = "-" if cents < 0 else ""
+    sign = "−" if cents < 0 else ""  # настоящий минус, а не дефис
     cents = abs(int(cents))
     rubles, kopeks = divmod(cents, 100)
     grouped = f"{rubles:,}".replace(",", NBSP)
