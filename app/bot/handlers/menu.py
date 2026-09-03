@@ -41,8 +41,13 @@ async def render_home(
 
     data = await service.summary(session, group=group)
     groups = await service.user_groups(session, user.id)
-    hint = "\n\n<i>Сменить группу: /groups</i>" if len(groups) > 1 else ""
-    text = f"👋 <b>{texts.esc(user.short_name)}</b>\n\n{texts.summary_text(data)}{hint}"
+    text = texts.lines(
+        texts.join("👋 ", texts.bold(user.short_name)),
+        texts.join(""),
+        texts.summary_text(data),
+    )
+    if len(groups) > 1:
+        text = texts.lines(text, texts.italic("Сменить бюджет: /groups"))
     return text, keyboards.main_menu(web_app_url=web_app_url() if private else None)
 
 
@@ -58,29 +63,39 @@ async def join_group_chat(message: Message, session: AsyncSession, user: User) -
 
     group = await resolve_group(session, message, user, join=True)
     members = await service.group_members(session, group.id)
-    names = ", ".join(texts.esc(m.short_name) for m in members)
+    names = ", ".join(m.short_name for m in members)
 
     if was_member:
         await message.answer(
-            f"Вы уже участвуете в бюджете «{texts.esc(group.title)}».\n"
-            f"Участники ({len(members)}): {names}"
+            texts.lines(
+                texts.join("Вы уже участвуете в бюджете «", group.title, "»."),
+                texts.join("👥 Участники (", str(len(members)), "): ", names),
+            )
         )
         return
 
     if len(members) == 1:
-        head = f"✅ <b>Бюджет «{texts.esc(group.title)}» подключён к этому чату</b>"
+        head = texts.join(
+            "✅ ", texts.bold("Бюджет «", group.title, "» подключён к этому чату")
+        )
     else:
-        head = f"✅ <b>{texts.esc(user.short_name)} в деле</b> — «{texts.esc(group.title)}»"
+        head = texts.join(
+            "✅ ", texts.bold(user.short_name, " в деле"), " — «", group.title, "»"
+        )
 
     await message.answer(
-        f"{head}\n"
-        + texts.quote(f"👥 Участники ({len(members)}): {names}")
-        + "\n<b>Дальше</b>\n"
-        + texts.quote(
-            "<code>/add 5000</code> — взнос в фонд\n"
-            "<code>/buy молоко хлеб 850</code> — покупка\n"
-            "<code>/join</code> — остальным, чтобы попасть в расчёты\n"
-            "<code>/help</code> — всё остальное"
+        texts.lines(
+            head,
+            texts.quote(texts.join("👥 Участники (", str(len(members)), "): ", names)),
+            texts.bold("Дальше"),
+            texts.quote(
+                texts.lines(
+                    texts.join(texts.code("/add 5000"), " — взнос в фонд"),
+                    texts.join(texts.code("/buy молоко хлеб 850"), " — покупка"),
+                    texts.join(texts.code("/join"), " — остальным, чтобы попасть в расчёты"),
+                    texts.join(texts.code("/help"), " — всё остальное"),
+                )
+            ),
         )
     )
 
@@ -114,14 +129,25 @@ async def new_group(
 ) -> None:
     title = (command.args or "").strip()
     if not title:
-        await message.answer("Укажите название: <code>/newgroup Квартира на Лесной</code>")
+        await message.answer(
+            texts.join("Укажите название: ", texts.code("/newgroup Квартира на Лесной"))
+        )
         return
     group = await service.create_group(session, title=title, owner=user)
     await service.set_active_group(session, user, group.id)
     await message.answer(
-        f"✅ Бюджет «{texts.esc(group.title)}» создан и выбран активным.\n\n"
-        "Чтобы подключить остальных, добавьте бота в общий чат и отправьте там /join — "
-        "или пусть каждый напишет боту /groups после приглашения."
+        texts.lines(
+            texts.join("✅ ", texts.bold("Бюджет «", group.title, "» создан")),
+            texts.quote(
+                texts.lines(
+                    texts.join(
+                        "Чтобы подключить остальных, добавьте бота в общий чат ",
+                        "и отправьте там ", texts.code("/join"), ".",
+                    ),
+                    texts.join("Бюджет уже выбран активным."),
+                )
+            ),
+        )
     )
 
 
@@ -132,7 +158,7 @@ async def groups_command(message: Message, session: AsyncSession, user: User) ->
         await message.answer(NO_GROUP_HINT)
         return
     await message.answer(
-        "Ваши бюджеты — выберите активный (в него пойдут операции из лички и inline):",
+        texts.join("Ваши бюджеты — выберите активный (операции из лички и inline пойдут в него):"),
         reply_markup=keyboards.groups_kb(groups, user.active_group_id),
     )
 
@@ -162,8 +188,10 @@ async def members_command(message: Message, session: AsyncSession, user: User) -
         await message.answer(NO_GROUP_HINT)
         return
     members = await service.group_members(session, group.id)
-    lines = "\n".join(f"• {texts.esc(m.display_name)}" for m in members) or "<i>пусто</i>"
-    await message.answer(f"<b>{texts.esc(group.title)}</b>\nУчастники:\n{lines}")
+    roster = texts.lines(*[texts.join("• ", m.display_name) for m in members]) or texts.italic("пусто")
+    await message.answer(
+        texts.lines(texts.join("💼 ", texts.bold(group.title)), texts.quote(roster))
+    )
 
 
 @router.message(Command("leave"), F.chat.type.in_(GROUP_CHATS))
@@ -173,8 +201,11 @@ async def leave_command(message: Message, session: AsyncSession, user: User) -> 
         return
     await service.leave_group(session, group_id=group.id, user_id=user.id)
     await message.answer(
-        f"{texts.esc(user.short_name)} больше не участвует в расчётах этого бюджета. "
-        "Прошлые операции остались в истории."
+        texts.join(
+            user.short_name,
+            " больше не участвует в расчётах этого бюджета. ",
+            "Прошлые операции остались в истории.",
+        )
     )
 
 
@@ -182,16 +213,23 @@ async def send_login_link(message: Message, session: AsyncSession, user: User) -
     """Выдаёт одноразовую ссылку входа. Только в личке — см. web_command_in_group."""
     if not settings.web_enabled:
         await message.answer(
-            "Веб-версия не настроена: в .env нужен PUBLIC_BASE_URL с https."
+            texts.join("Веб-версия не настроена: в .env нужен PUBLIC_BASE_URL с https.")
         )
         return
 
     token = await service.create_login_token(session, user.id)
     await message.answer(
-        "🌐 Ссылка для входа в веб-версию — одноразовая, действует 15 минут:\n"
-        f"{settings.public_base}/?login={token}\n\n"
-        "Открывается в любом браузере и как мини-аппа в Telegram.\n"
-        "<i>Никому её не пересылайте: она пускает в ваш аккаунт без пароля.</i>",
+        texts.lines(
+            texts.join("🌐 ", texts.bold("Вход в веб-версию")),
+            texts.quote(
+                texts.lines(
+                    texts.code(settings.public_base + "/?login=" + token),
+                    texts.join("Одноразовая, действует 15 минут."),
+                    texts.join("Открывается в браузере и как мини-аппа в Telegram."),
+                )
+            ),
+            texts.italic("Никому её не пересылайте: она пускает в ваш аккаунт без пароля"),
+        ),
         disable_web_page_preview=True,
     )
 
@@ -219,8 +257,10 @@ async def web_command_in_group(message: Message, bot: Bot) -> None:
         ]
     )
     await message.reply(
-        "🔒 Ссылку для входа выдаю только в личных сообщениях: в общем чате "
-        "по ней мог бы зайти в ваш аккаунт кто угодно.",
+        texts.join(
+            "🔒 Ссылку для входа выдаю только в личных сообщениях: в общем чате ",
+            "по ней мог бы зайти в ваш аккаунт кто угодно.",
+        ),
         reply_markup=keyboard,
     )
 
@@ -290,11 +330,11 @@ async def menu_group(
 
     group = await service.resolve_active_group(session, user)
     members = await service.group_members(session, group.id) if group else []
-    names = "\n".join(f"• {texts.esc(m.display_name)}" for m in members) or "<i>пусто</i>"
-    text = (
-        f"<b>{texts.esc(group.title if group else '')}</b>\n"
-        f"Участники:\n{names}\n\n"
-        "Выберите активную группу — в неё пойдут операции из лички и inline:"
+    roster = texts.lines(*[texts.join("• ", m.display_name) for m in members]) or texts.italic("пусто")
+    text = texts.lines(
+        texts.join("💼 ", texts.bold(group.title if group else "")),
+        texts.quote(roster),
+        texts.join("Выберите активный бюджет — в него пойдут операции из лички и inline:"),
     )
     await edit_card(bot, callback, text, keyboards.groups_kb(groups, user.active_group_id))
     await callback.answer()

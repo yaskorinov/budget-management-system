@@ -1,8 +1,10 @@
-"""Проверка разметки сообщений: Telegram отвергает сообщение целиком,
-если разметка сломана, поэтому теги проверяем механически."""
+"""Проверка разметки сообщений: MarkdownV2 не прощает ни одного
+неэкранированного спецсимвола — Telegram отвергает такое сообщение целиком.
+Поэтому каждое сообщение рендерится с враждебными данными и разбирается."""
 import asyncio
 import os
 import pathlib, sys
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
@@ -16,61 +18,19 @@ os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{db.as_posix()}"
 os.environ["LLM_PROVIDER"] = "off"
 os.environ["PUBLIC_BASE_URL"] = "https://budget.example.com"
 
-from html.parser import HTMLParser
-
 from app.bot import texts
+from md_check import validate
 from app.core import reports, service
 from app.core.classifier import parse_purchase
 from app.db.base import engine, init_db, session_scope
 
-# Что Telegram понимает в режиме HTML
-ALLOWED = {
-    "b", "strong", "i", "em", "u", "ins", "s", "strike", "del",
-    "span", "tg-spoiler", "a", "tg-emoji", "code", "pre", "blockquote",
-}
-VOID = set()
-
-
-class Checker(HTMLParser):
-    """Ловит незакрытые, лишние и криво вложенные теги."""
-
-    def __init__(self):
-        super().__init__(convert_charrefs=False)
-        self.stack: list[str] = []
-        self.errors: list[str] = []
-
-    def handle_starttag(self, tag, attrs):
-        if tag not in ALLOWED:
-            self.errors.append(f"недопустимый тег <{tag}>")
-        if tag not in VOID:
-            self.stack.append(tag)
-
-    def handle_endtag(self, tag):
-        if not self.stack:
-            self.errors.append(f"закрыт незакрытый <{tag}>")
-        elif self.stack[-1] != tag:
-            self.errors.append(f"</{tag}> при открытом <{self.stack[-1]}>")
-            self.stack.pop()
-        else:
-            self.stack.pop()
-
-    def finish(self) -> list[str]:
-        if self.stack:
-            self.errors.append(f"не закрыты: {self.stack}")
-        return self.errors
-
-
 def check(name: str, markup: str) -> None:
-    parser = Checker()
-    parser.feed(markup)
-    errors = parser.finish()
-    assert not errors, f"{name}: {errors}\n{markup}"
-    # Сырые < и & мимо тегов Telegram тоже не простит
-    assert " & " not in markup, f"{name}: неэкранированный амперсанд"
-    print(f"\n=== {name} ===\n{markup}")
+    errors = validate(str(markup))
+    assert not errors, f"{name}: {errors}" + chr(10) + str(markup)
+    print(f"{chr(10)}=== {name} ==={chr(10)}{markup}")
 
 
-HOSTILE = '<b>Хакер</b> & "Ко"'  # имя из Telegram может быть любым
+HOSTILE = "<b>Хакер</b> & (Ко) — 1.5 * 2 [!]"  # имя из Telegram может быть любым
 
 
 async def main() -> None:
@@ -80,7 +40,7 @@ async def main() -> None:
         borya = await service.get_or_create_user(s, tg_user_id=2, first_name=HOSTILE)
         vika = await service.get_or_create_user(s, tg_user_id=3, first_name="Вика")
         group = await service.get_or_create_group_for_chat(
-            s, tg_chat_id=-1, title='Квартира <на> "Лесной" & Ко'
+            s, tg_chat_id=-1, title="Квартира №5 (2-й этаж) [Лесная, 12]"
         )
         for user in (anya, borya, vika):
             await service.ensure_member(s, group_id=group.id, user_id=user.id)
@@ -99,20 +59,16 @@ async def main() -> None:
             parsed = await parse_purchase(text)
             operations.append(
                 await service.add_purchase(
-                    s,
-                    group_id=group.id,
-                    author_id=who.id,
-                    amount=parsed.amount,
-                    category=parsed.category,
-                    title=parsed.title,
+                    s, group_id=group.id, author_id=who.id, amount=parsed.amount,
+                    category=parsed.category, title=parsed.title,
                     category_source=parsed.source,
                 )
             )
 
         partial = await service.add_purchase(
             s, group_id=group.id, author_id=vika.id, amount=120000,
-            category="food", title="Пицца", participant_ids=[vika.id, borya.id],
-            category_source="manual",
+            category="food", title="Пицца (2 шт.) — 50% скидка",
+            participant_ids=[vika.id, borya.id], category_source="manual",
         )
 
         data = await service.summary(s, group=group)
@@ -133,11 +89,12 @@ async def main() -> None:
         check("Список операций",
               texts.operations_text(
                   await service.list_operations(s, group_id=group.id, limit=10),
-                  title="📒 <b>Операции</b>", empty="пусто"))
+                  title=texts.join("📒 ", texts.bold("Операции")), empty="пусто"))
         check("Короткий список",
-              texts.operations_text(operations[:2], title="📒 <b>Мои</b>", empty="пусто"))
+              texts.operations_text(operations[:2],
+                                    title=texts.join("📒 ", texts.bold("Мои")), empty="пусто"))
         check("Пустой список",
-              texts.operations_text([], title="📒 <b>Мои</b>", empty="Пока пусто"))
+              texts.operations_text([], title=texts.bold("Мои"), empty="Пока пусто"))
         check("Черновик покупки",
               texts.draft_card(kind="purchase", amount=85000, title="Молоко и хлеб",
                                category="food", group_title=group.title,
@@ -152,12 +109,15 @@ async def main() -> None:
               texts.stats_caption(group_title=group.title, mode=report.mode,
                                   period_title=report.period_title, total=report.total))
         check("Текстовая статистика", texts.pre(reports.render_text(report)))
-        report_people = await reports.build(s, group=group, mode="people", period="all")
-        check("Статистика по людям", texts.pre(reports.render_text(report_people)))
+        people = await reports.build(s, group=group, mode="people", period="all")
+        check("Статистика по людям", texts.pre(reports.render_text(people)))
         check("Справка", texts.help_text("budget_bot"))
 
+        from app.bot.common import NO_GROUP_HINT
+        check("Нет бюджета", NO_GROUP_HINT)
+
     await engine.dispose()
-    print("\nOK: разметка сообщений корректна")
+    print(chr(10) + "OK: разметка MarkdownV2 корректна")
 
 
 asyncio.run(main())

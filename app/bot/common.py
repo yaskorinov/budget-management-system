@@ -8,6 +8,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot import texts
 from app.config import settings
 from app.core import service
 from app.db.models import Group, User
@@ -38,11 +39,21 @@ async def resolve_group(
     return await service.resolve_active_group(session, user)
 
 
-NO_GROUP_HINT = (
-    "💼 <b>У вас пока нет общего бюджета</b>\n"
-    "<blockquote>Добавьте бота в общий чат и отправьте там <code>/join</code> — "
-    "бюджет создастся сам.\n"
-    "Либо заведите его прямо здесь: <code>/newgroup Название</code></blockquote>"
+NO_GROUP_HINT = texts.lines(
+    texts.join("💼 ", texts.bold("У вас пока нет общего бюджета")),
+    texts.quote(
+        texts.lines(
+            texts.join(
+                "Добавьте бота в общий чат и отправьте там ",
+                texts.code("/join"),
+                " — бюджет создастся сам.",
+            ),
+            texts.join(
+                "Либо заведите его прямо здесь: ",
+                texts.code("/newgroup Название"),
+            ),
+        )
+    ),
 )
 
 
@@ -118,7 +129,7 @@ async def show_operation_card(
     *,
     header: str | None = None,
 ) -> None:
-    from app.bot import keyboards, texts
+    from app.bot import keyboards
 
     group = await session.get(Group, operation.group_id)
     members = await service.group_members(session, operation.group_id)

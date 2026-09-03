@@ -52,7 +52,9 @@ def create_bot() -> Bot:
         raise RuntimeError("BOT_TOKEN не задан — заполните .env")
     return Bot(
         token=settings.bot_token,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML, link_preview_is_disabled=True),
+        default=DefaultBotProperties(
+            parse_mode=ParseMode.MARKDOWN_V2, link_preview_is_disabled=True
+        ),
     )
 
 

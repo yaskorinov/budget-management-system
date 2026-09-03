@@ -48,7 +48,11 @@ async def send_report(
 
     if report.is_empty:
         await message.answer(
-            f"{_caption(report)}\n\n<i>За этот период расходов нет.</i>",
+            texts.lines(
+                _caption(report),
+                texts.join(""),
+                texts.italic("За этот период расходов нет"),
+            ),
             reply_markup=markup,
         )
         return
@@ -56,7 +60,7 @@ async def send_report(
     png = reports.render_png(report)
     if png is None:
         await message.answer(
-            f"{_caption(report)}\n\n{texts.pre(reports.render_text(report))}",
+            texts.lines(_caption(report), texts.pre(reports.render_text(report))),
             reply_markup=markup,
         )
         return
@@ -171,13 +175,13 @@ async def stats_switch(
             )
         else:
             body = (
-                "<i>За этот период расходов нет.</i>"
+                texts.italic("За этот период расходов нет")
                 if report.is_empty
                 else texts.pre(reports.render_text(report))
             )
             # Диаграмму за пустой период оставлять нельзя: старая картинка
             # с новой подписью выглядит как настоящие данные.
-            await edit_card(bot, callback, f"{caption}\n\n{body}", markup)
+            await edit_card(bot, callback, texts.lines(caption, body), markup)
     except TelegramBadRequest as exc:
         if "message is not modified" not in str(exc):
             raise

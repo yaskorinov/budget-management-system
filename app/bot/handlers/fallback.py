@@ -5,7 +5,7 @@ from aiogram import Bot, F, Router
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot import keyboards
+from app.bot import keyboards, texts
 from app.bot.common import NO_GROUP_HINT
 from app.bot.handlers.entry import record_purchase
 from app.core import service
@@ -22,9 +22,14 @@ async def private_text(
     amount, _ = parse_amount(message.text)
     if amount is None:
         await message.answer(
-            "Не понял. Напишите покупку с суммой — <code>молоко хлеб 850</code>, "
-            "или «внёс 5000» для пополнения фонда.\n"
-            "Меню: /start · Все команды: /help",
+            texts.lines(
+                texts.join(
+                    "Не понял. Напишите покупку с суммой — ",
+                    texts.code("молоко хлеб 850"),
+                ),
+                texts.join("или «внёс 5000» для пополнения фонда."),
+                texts.italic("Меню: /start · Все команды: /help"),
+            ),
             reply_markup=keyboards.back_home_kb(),
         )
         return

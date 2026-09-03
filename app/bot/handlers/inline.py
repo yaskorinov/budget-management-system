@@ -44,9 +44,7 @@ def _article(
         id=result_id,
         title=title,
         description=description,
-        input_message_content=InputTextMessageContent(
-            message_text=text, parse_mode="HTML"
-        ),
+        input_message_content=InputTextMessageContent(message_text=text),
         reply_markup=markup,
     )
 
@@ -57,25 +55,25 @@ def _hints(group_title: str) -> list[InlineQueryResultArticle]:
             result_id="hint-buy",
             title="🛒 Покупка: напишите что и сколько",
             description="например: молоко хлеб 850",
-            text=f"Бюджет «{texts.esc(group_title)}»: напишите покупку с суммой.",
+            text=texts.join("Бюджет «", group_title, "»: напишите покупку с суммой"),
         ),
         _article(
             result_id="hint-add",
             title="💰 Взнос: «внёс 5000»",
             description="пополнить общий фонд",
-            text=f"Бюджет «{texts.esc(group_title)}»: напишите «внёс 5000».",
+            text=texts.join("Бюджет «", group_title, "»: напишите «внёс 5000»"),
         ),
         _article(
             result_id="hint-stats",
             title="📊 «стата категории» или «стата люди»",
             description="круговая диаграмма расходов",
-            text=f"Бюджет «{texts.esc(group_title)}»: напишите «стата категории».",
+            text=texts.join("Бюджет «", group_title, "»: напишите «стата категории»"),
         ),
         _article(
             result_id="hint-balance",
             title="💼 «баланс»",
             description="кто сколько внёс и сколько должен",
-            text=f"Бюджет «{texts.esc(group_title)}»: напишите «баланс».",
+            text=texts.join("Бюджет «", group_title, "»: напишите «баланс»"),
         ),
     ]
 
@@ -101,7 +99,9 @@ async def _stats_results(
                 result_id=f"stats-empty-{report.mode}-{report.period}",
                 title=f"📊 Расходы {reports.MODES[report.mode]}",
                 description=f"{report.period_title}: расходов нет",
-                text=f"{caption}\n\n<i>За этот период расходов нет.</i>",
+                text=texts.lines(
+                    caption, texts.join(""), texts.italic("За этот период расходов нет")
+                ),
             )
         ]
 
@@ -116,7 +116,6 @@ async def _stats_results(
                 title=f"Расходы {reports.MODES[report.mode]}",
                 description=f"{report.period_title}, {format_money(report.total)}",
                 caption=caption,
-                parse_mode="HTML",
             )
         ]
 
@@ -125,7 +124,7 @@ async def _stats_results(
             result_id=f"stats-text-{report.mode}-{report.period}",
             title=f"📊 Расходы {reports.MODES[report.mode]}",
             description=f"{report.period_title}, {format_money(report.total)}",
-            text=f"{caption}\n\n{texts.pre(reports.render_text(report))}",
+            text=texts.lines(caption, texts.pre(reports.render_text(report))),
         )
     ]
 
@@ -173,7 +172,9 @@ async def inline_query(
                     result_id="no-group",
                     title="Нет активного бюджета",
                     description="Откройте бота и создайте или выберите группу",
-                    text="Сначала нужно создать общий бюджет — напишите боту /start.",
+                    text=texts.join(
+                        "Сначала нужно создать общий бюджет — напишите боту /start"
+                    ),
                 )
             ],
             cache_time=1,
@@ -241,7 +242,9 @@ async def inline_query(
                     result_id="need-amount",
                     title="Добавьте сумму",
                     description="например: молоко хлеб 850",
-                    text="Чтобы записать покупку, укажите сумму: «молоко хлеб 850».",
+                    text=texts.join(
+                        "Чтобы записать покупку, укажите сумму: «молоко хлеб 850»"
+                    ),
                 )
             ],
             cache_time=1,
@@ -369,7 +372,7 @@ async def draft_cancel(
         return
 
     drafts.drop(callback_data.draft_id)
-    await edit_card(bot, callback, "✖️ Черновик отменён.", None)
+    await edit_card(bot, callback, texts.italic("Черновик отменён"), None)
     await callback.answer()
 
 
@@ -405,8 +408,10 @@ async def draft_categories(
         await edit_card(
             bot,
             callback,
-            f"Выберите категорию для «{texts.esc(draft.title)}» "
-            f"({format_money(draft.amount)}):",
+            texts.join(
+                "Выберите категорию для «", draft.title, "» · ",
+                format_money(draft.amount),
+            ),
             keyboards.draft_categories_kb(draft.id),
         )
     await callback.answer()

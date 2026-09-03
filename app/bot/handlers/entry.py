@@ -62,11 +62,17 @@ async def ask_for_input(
     обычную реплику в чате он бы просто не получил.
     """
     if message.chat.type == "private":
-        prompt = await message.answer(text, reply_markup=keyboards.cancel_kb())
+        prompt = await message.answer(
+            texts.join(text), reply_markup=keyboards.cancel_kb()
+        )
     else:
         prompt = await message.reply(
-            f"{text}\n\n<i>Ответьте на это сообщение — или пришлите всё одной "
-            f"строкой, например <code>{placeholder}</code>.</i>",
+            texts.lines(
+                texts.join(text),
+                texts.join(""),
+                texts.italic("Ответьте на это сообщение — или пришлите всё одной строкой"),
+                texts.code(placeholder),
+            ),
             reply_markup=ForceReply(selective=True, input_field_placeholder=placeholder),
         )
 
@@ -105,7 +111,7 @@ async def record_purchase(
     parsed = await parse_purchase(text)
     if not parsed.amount:
         await message.answer(
-            "Не нашёл сумму. Напишите так: <code>молоко хлеб 850</code>",
+            texts.join("Не нашёл сумму. Напишите так: ", texts.code("молоко хлеб 850")),
             reply_markup=keyboards.cancel_kb() if message.chat.type == "private" else None,
         )
         return
@@ -208,7 +214,10 @@ async def menu_add(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None
     await edit_card(
         bot,
         callback,
-        "💰 Сколько внести в общий фонд?\nНапишите сумму, например <code>5000</code>.",
+        texts.lines(
+            texts.join("💰 ", texts.bold("Сколько внести в общий фонд?")),
+            texts.join("Напишите сумму, например ", texts.code("5000")),
+        ),
         keyboards.cancel_kb(),
     )
     await callback.answer()
@@ -221,9 +230,13 @@ async def menu_buy(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None
     await edit_card(
         bot,
         callback,
-        "🛒 Что купили и на сколько?\n"
-        "Например: <code>молоко хлеб яйца 850</code> или <code>чайник bosch 3500</code>.\n\n"
-        "<i>Категорию определит ИИ — потом её можно поправить кнопкой.</i>",
+        texts.lines(
+            texts.join("🛒 ", texts.bold("Что купили и на сколько?")),
+            texts.join("Например: ", texts.code("молоко хлеб яйца 850")),
+            texts.join("или ", texts.code("чайник bosch 3500")),
+            texts.join(""),
+            texts.italic("Категорию определит ИИ — потом её можно поправить кнопкой"),
+        ),
         keyboards.cancel_kb(),
     )
     await callback.answer()
@@ -236,7 +249,7 @@ async def contribution_amount(
     amount, _ = parse_amount(message.text)
     if amount is None:
         await message.reply(
-            "Не понял сумму. Напишите числом, например <code>5000</code>.",
+            texts.join("Не понял сумму. Напишите числом, например ", texts.code("5000")),
             reply_markup=keyboards.cancel_kb() if message.chat.type == "private" else None,
         )
         return

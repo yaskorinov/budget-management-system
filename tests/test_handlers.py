@@ -19,6 +19,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.types import (CallbackQuery, Chat, InlineQuery, Message, Update,
                            User as TgUser)
+from md_check import validate
 from mock_tg import MockSession
 
 from app.bot.bot import create_dispatcher
@@ -48,6 +49,7 @@ def msg(text, user=ANYA, chat=PRIVATE, reply_to=None, message_id=None):
 async def send(text, user=ANYA, chat=PRIVATE, reply_to=None):
     session.reset()
     await dp.feed_update(bot, upd(message=msg(text, user, chat, reply_to)))
+    assert_markup_ok(f"send({text!r})")
     return session.texts()
 
 
@@ -64,6 +66,7 @@ async def press(data, user=ANYA, chat=PRIVATE, inline_message_id=None):
         inline_message_id=inline_message_id,
     ).as_(bot)
     await dp.feed_update(bot, upd(callback_query=cb))
+    assert_markup_ok(f"press({data!r})")
     return session.texts()
 
 async def inline(query, user=ANYA):
@@ -71,6 +74,25 @@ async def inline(query, user=ANYA):
     await dp.feed_update(bot, upd(inline_query=InlineQuery(
         id="iq1", from_user=user, query=query, offset="", chat_type="supergroup")))
     return session.calls
+
+def assert_markup_ok(where: str) -> None:
+    """Всё, что бот отправил за последний шаг, должно пройти разбор MarkdownV2."""
+    for name, data in session.calls:
+        if name == "AnswerCallbackQuery":
+            continue  # всплывающая подсказка показывается как есть, без разбора
+        for field in ("text", "caption"):
+            value = data.get(field)
+            if not value:
+                continue
+            errors = validate(value)
+            assert not errors, f"{where} -> {name}.{field}: {errors}" + chr(10) + value
+        for result in data.get("results", []):
+            content = result.get("input_message_content") or {}
+            for value in (content.get("message_text"), result.get("caption")):
+                if value:
+                    errors = validate(value)
+                    assert not errors, f"{where} -> inline: {errors}" + chr(10) + value
+
 
 def show(title, lines):
     print(f"\n### {title}")

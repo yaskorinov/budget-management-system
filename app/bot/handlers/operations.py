@@ -40,16 +40,25 @@ async def render_operations(
     )
     total = await service.count_operations(session, group_id=group.id, author_id=author_id)
     heading = "Мои операции" if scope == "mine" else "Операции группы"
-    title = f"📒 <b>{heading}</b> · <i>{texts.esc(group.title)}</i>"
+    title = texts.join("📒 ", texts.bold(heading), " · ", texts.italic(group.title))
     if total:
-        title += f"\n<i>{offset + 1}–{offset + len(operations)} из {total}</i>"
+        title = texts.lines(
+            title,
+            texts.italic(
+                str(offset + 1), "–", str(offset + len(operations)), " из ", str(total)
+            ),
+        )
 
     text = texts.operations_text(
         operations,
         title=title,
-        empty="Пока пусто. Добавьте взнос или покупку.",
+        empty="Пока пусто. Добавьте взнос или покупку",
     )
-    text += "\n\n<i>Нажмите номер операции, чтобы открыть карточку с правкой.</i>"
+    text = texts.lines(
+        text,
+        texts.join(""),
+        texts.italic("Нажмите номер операции, чтобы открыть карточку с правкой"),
+    )
     markup = keyboards.ops_kb(
         operations, scope=scope, offset=offset, has_more=offset + PAGE < total, page=PAGE
     )
@@ -148,8 +157,10 @@ async def op_categories(
     await edit_card(
         bot,
         callback,
-        f"Выберите категорию для операции <code>#{operation.id}</code> "
-        f"({texts.money(operation.amount)} — {texts.esc(operation.title or '')}):",
+        texts.join(
+            "Выберите категорию для ", texts.code("#" + str(operation.id)), " · ",
+            texts.money(operation.amount), " — ", operation.title or "",
+        ),
         keyboards.op_categories_kb(operation.id),
     )
     await callback.answer()
@@ -164,7 +175,7 @@ async def op_set_category(
         return
     await service.edit_operation(session, operation, category=callback_data.value)
     await show_operation_card(
-        bot, callback, session, operation, header="✏️ <b>Категория обновлена</b>"
+        bot, callback, session, operation, header=texts.join("✏️ ", texts.bold("Категория обновлена"))
     )
     await callback.answer("Категория обновлена")
 
@@ -180,8 +191,13 @@ async def op_participants(
     await edit_card(
         bot,
         callback,
-        f"Между кем делится операция <code>#{operation.id}</code> "
-        f"({texts.money(operation.amount)})?\nНажмите, чтобы включить или исключить.",
+        texts.lines(
+            texts.join(
+                "Между кем делится ", texts.code("#" + str(operation.id)),
+                " · ", texts.money(operation.amount), "?",
+            ),
+            texts.italic("Нажмите, чтобы включить или исключить"),
+        ),
         keyboards.op_participants_kb(operation, members),
     )
     await callback.answer()
@@ -210,9 +226,13 @@ async def op_toggle_participant(
     await edit_card(
         bot,
         callback,
-        f"Между кем делится операция <code>#{operation.id}</code> "
-        f"({texts.money(operation.amount)})?\n"
-        f"Сейчас: по {texts.money(operation.shares[0].amount)} с человека.",
+        texts.lines(
+            texts.join(
+                "Между кем делится ", texts.code("#" + str(operation.id)),
+                " · ", texts.money(operation.amount), "?",
+            ),
+            texts.join("Сейчас по ", texts.bold(texts.money(operation.shares[0].amount)), " с человека"),
+        ),
         keyboards.op_participants_kb(operation, members),
     )
     await callback.answer()
@@ -244,17 +264,20 @@ async def op_amount_prompt(
     )
 
     if callback.inline_message_id:
-        where = "Отправьте новую сумму боту в личку."
+        where = "Отправьте новую сумму боту в личку"
     elif is_private(callback):
-        where = "Отправьте новую сумму сообщением."
+        where = "Отправьте новую сумму сообщением"
     else:
-        where = "Ответьте на это сообщение новой суммой."
+        where = "Ответьте на это сообщение новой суммой"
 
     await edit_card(
         bot,
         callback,
-        f"✏️ Новая сумма для операции <code>#{operation.id}</code>\n"
-        f"Сейчас: <b>{texts.money(operation.amount)}</b>. {where}",
+        texts.lines(
+            texts.join("✏️ Новая сумма для ", texts.code("#" + str(operation.id))),
+            texts.join("Сейчас: ", texts.bold(texts.money(operation.amount))),
+            texts.italic(where),
+        ),
         keyboards.operation_kb(operation, compact=True),
     )
     await callback.answer()
@@ -266,7 +289,9 @@ async def op_amount_set(
 ) -> None:
     amount, _ = parse_amount(message.text)
     if amount is None:
-        await message.reply("Не понял сумму. Напишите числом, например <code>850</code>.")
+        await message.reply(
+            texts.join("Не понял сумму. Напишите числом, например ", texts.code("850"))
+        )
         return
 
     data = await state.get_data()
@@ -274,7 +299,7 @@ async def op_amount_set(
 
     operation = await service.get_operation(session, int(data.get("op_id") or 0))
     if operation is None or not await service.can_manage(session, operation, user):
-        await message.reply("Операция не найдена или недоступна для правки.")
+        await message.reply(texts.join("Операция не найдена или недоступна для правки."))
         return
 
     await service.edit_operation(session, operation, amount=amount)
@@ -283,7 +308,7 @@ async def op_amount_set(
     card = texts.operation_card(
         operation,
         group=group,
-        header="✏️ <b>Сумма обновлена</b>",
+        header=texts.join("✏️ ", texts.bold("Сумма обновлена")),
         members_total=len(members),
     )
     markup = keyboards.operation_kb(operation, compact=True)
@@ -308,8 +333,10 @@ async def op_amount_set(
 
     if updated:
         await message.reply(
-            f"✏️ Операция <code>#{operation.id}</code> — теперь "
-            f"<b>{texts.money(operation.amount)}</b>."
+            texts.join(
+                "✏️ ", texts.code("#" + str(operation.id)), " — теперь ",
+                texts.bold(texts.money(operation.amount)),
+            )
         )
     else:
         await message.answer(card, reply_markup=markup)
@@ -325,9 +352,13 @@ async def op_delete_confirm(
     await edit_card(
         bot,
         callback,
-        f"Удалить операцию <code>#{operation.id}</code> на "
-        f"<b>{texts.money(operation.amount)}</b>?\n"
-        "<i>Она исчезнет из балансов и статистики.</i>",
+        texts.lines(
+            texts.join(
+                "Удалить ", texts.code("#" + str(operation.id)), " на ",
+                texts.bold(texts.money(operation.amount)), "?",
+            ),
+            texts.italic("Она исчезнет из балансов и статистики"),
+        ),
         keyboards.confirm_delete_kb(operation.id),
     )
     await callback.answer()
@@ -347,9 +378,13 @@ async def op_delete(
     await edit_card(
         bot,
         callback,
-        f"🗑 Операция <code>#{operation.id}</code> на "
-        f"{texts.money(operation.amount)} удалена.\n"
-        f"💼 В фонде: <b>{texts.money(data.fund_left)}</b>",
+        texts.lines(
+            texts.join(
+                "🗑 ", texts.code("#" + str(operation.id)), " на ",
+                texts.money(operation.amount), " удалена",
+            ),
+            texts.join("💼 В фонде: ", texts.bold(texts.money(data.fund_left))),
+        ),
         keyboards.back_home_kb() if is_private(callback) else None,
     )
     await callback.answer("Удалено")
