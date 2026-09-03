@@ -1,0 +1,293 @@
+# Общий бюджет — Telegram-бот, мини-аппа и веб
+
+Учёт совместных расходов для тех, кто скидывается в общий котёл: соседи по квартире,
+семья, компания друзей. Покупки категоризирует LLM, статистика — круговые диаграммы.
+
+## Как считаются деньги
+
+Модель — **общий фонд**:
+
+* каждый **вносит сумму с запасом** в общий фонд (`/add 5000`);
+* покупки **списываются из фонда** (`/buy молоко хлеб 850`);
+* каждая покупка делится **между выбранными участниками** (по умолчанию — все,
+  состав правится кнопкой «👥 Участники»);
+* **баланс человека** = сколько внёс − сумма его долей в покупках.
+  Плюс — есть запас, минус — нужно доложить;
+* **остаток фонда** = сумма всех балансов (инвариант проверяется тестами).
+
+Все суммы хранятся в копейках, деление остатка — по копейке первым участникам,
+поэтому доли всегда складываются ровно в сумму покупки.
+
+## Категории
+
+`🍎 Продукты питания` · `🧴 Бытовые мелочи` · `💡 Коммуналка` ·
+`📺 Общие подписки` · `🛋 Общие предметы` · `📦 Прочее`
+
+Категорию определяет LLM по тексту покупки. Если ключа нет или API недоступен —
+работает словарь ключевых слов, бот не ломается. Категорию всегда можно поправить
+кнопкой, тогда она помечается как заданная вручную.
+
+## Три интерфейса
+
+### 1. Личка бота
+Меню с кнопками: внести, записать покупку, статистика, свои операции, выбор группы.
+Свободный текст тоже работает: `молоко хлеб 850`, `внёс 5000`.
+
+### 2. Групповой чат
+```
+/join                      подключить бюджет к чату и войти в расчёты
+/add 5000                  взнос в фонд
+/buy молоко хлеб 850       покупка
+/balance                   балансы участников
+/stats категории           круговая диаграмма
+/stats люди месяц          диаграмма по людям за период
+/ops                       последние операции
+/members                   участники
+```
+Без команд тоже понимает: `внёс 5000`, `купил молоко 850`.
+
+### 3. Inline — в любом чате, даже там, где бота нет
+```
+@ваш_бот 850 молоко хлеб        черновик покупки -> кнопка «Записать»
+@ваш_бот внёс 5000              черновик взноса
+@ваш_бот стата категории        круговая диаграмма
+@ваш_бот стата люди неделя      диаграмма по людям за период
+@ваш_бот баланс                 текущие балансы
+```
+Inline-запрос не знает, в каком чате его отправили, поэтому операции идут
+в **активную группу** пользователя (меняется в `/groups` или автоматически —
+в последнем чате, где человек что-то записал).
+
+### 4. Мини-аппа и браузер
+Одна и та же страница работает как Telegram Mini App (вход по `initData`)
+и как обычный сайт (вход по одноразовой ссылке из команды `/web`).
+Диаграмма рисуется на canvas без внешних библиотек.
+
+Любую свою операцию можно отредактировать или удалить из любого интерфейса —
+меняются и балансы, и статистика. Чужие операции доступны только админу группы.
+
+## Быстрый старт
+
+### Docker (рекомендуется)
+
+```bash
+cp .env.example .env            # вписать BOT_TOKEN и LLM_API_KEY
+docker compose up -d --build
+docker compose logs -f
+```
+
+Веб — на `http://127.0.0.1:8080`, бот стартует в том же контейнере.
+
+### Без Docker
+
+```bash
+python -m venv .venv
+.venv/bin/pip install -r requirements.txt      # Windows: .venv\Scripts\pip
+cp .env.example .env
+python run.py
+```
+
+Бот поднимется в режиме long polling. Мини-аппа и inline-диаграммы требуют
+публичного https (см. деплой).
+
+Проверить категоризацию без Telegram:
+```bash
+python scripts/check_llm.py "туалетка и фейри 450"
+```
+
+## Настройки (.env)
+
+| Переменная | Зачем |
+|---|---|
+| `BOT_TOKEN` | токен от [@BotFather](https://t.me/BotFather) |
+| `BOT_MODE` | `polling` для разработки, `webhook` для VPS |
+| `WEBHOOK_SECRET` | секрет проверки апдейтов вебхука |
+| `PUBLIC_BASE_URL` | публичный https-адрес: вебхук, мини-аппа, картинки диаграмм |
+| `SECRET_KEY` | подпись сессий веба (`openssl rand -hex 32`) |
+| `DATABASE_URL` | по умолчанию SQLite; для Postgres — `postgresql+asyncpg://…` |
+| `TZ_OFFSET_HOURS` | часовой пояс для границ периодов (3 = Москва) |
+| `LLM_PROVIDER` | `anthropic`, `openai_compat` или `off` |
+| `LLM_API_KEY` / `LLM_MODEL` / `LLM_BASE_URL` | доступ к LLM |
+
+**Про LLM-провайдера.** `anthropic` ходит через официальный SDK
+(`LLM_BASE_URL` можно указать, если используется прокси). `openai_compat` — любой
+OpenAI-совместимый эндпоинт `/v1/chat/completions`: OpenAI, OpenRouter, свой прокси,
+локальные vLLM/Ollama. Ответ запрашивается строгой JSON-схемой, при любой ошибке —
+тихий фолбэк на словарь.
+
+## Настройка бота в BotFather
+
+1. `/newbot` → получить токен.
+2. `/setinline` → включить inline-режим, подсказка: `850 молоко хлеб · стата категории`.
+3. `/setinlinefeedback` → `Enabled 100%` — тогда операция из inline записывается
+   сразу при выборе результата, без нажатия «Записать». Без этого всё тоже работает:
+   в сообщении будет кнопка подтверждения.
+4. `/setmenubutton` → Web App, URL = `PUBLIC_BASE_URL` (для мини-аппы).
+5. Добавить бота в общий чат и отправить там `/join`. Права администратора не нужны,
+   но при включённой приватности бот видит только команды и обращения к себе —
+   для распознавания «купил молоко 850» отключите приватность: `/setprivacy` → `Disabled`.
+
+## Docker: что внутри
+
+* один контейнер — и бот, и веб-сервер, как и задумано (Telegram нельзя опрашивать
+  двумя процессами, поэтому `--scale app=2` ломает бота);
+* образ **не содержит `.env`** — настройки приходят через `env_file`, секреты в слои не попадают;
+* работает от пользователя `app` (uid 1000), не от root;
+* база и кэш диаграмм — в именованном томе `budget-data`, пересборка образа их не трогает;
+* порт публикуется только на `127.0.0.1` — наружу выпускает Caddy или nginx;
+* `HEALTHCHECK` дёргает `/healthz`, `restart: unless-stopped` поднимает после сбоя и ребута;
+* кэш шрифтов matplotlib прогревается на этапе сборки, поэтому первая диаграмма
+  строится так же быстро, как остальные.
+
+```bash
+docker compose exec app python tests/run_all.py        # прогнать проверки внутри образа
+docker compose exec app python scripts/check_llm.py    # проверить категоризацию
+docker compose cp app:/app/data/expenses.db ./backup.db   # бэкап базы
+docker compose up -d --build                           # обновление после git pull
+```
+
+## Деплой на Debian VPS
+
+### Вариант 1 — Docker (рекомендуется)
+
+Установка Docker на чистый Debian:
+```bash
+apt-get update && apt-get install -y ca-certificates curl
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+https://download.docker.com/linux/debian $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
+  > /etc/apt/sources.list.d/docker.list
+apt-get update && apt-get install -y docker-ce docker-ce-cli containerd.io \
+  docker-buildx-plugin docker-compose-plugin
+```
+
+Запуск с автоматическим HTTPS (Caddy сам получает и продлевает сертификат):
+```bash
+git clone <репозиторий> /opt/budget-bot && cd /opt/budget-bot
+cp .env.example .env
+nano .env                     # BOT_TOKEN, LLM_API_KEY,
+                              # PUBLIC_BASE_URL=https://budget.example.com, BOT_MODE=webhook
+sed -i "s|^SECRET_KEY=.*|SECRET_KEY=$(openssl rand -hex 32)|" .env
+sed -i "s|^WEBHOOK_SECRET=.*|WEBHOOK_SECRET=$(openssl rand -hex 16)|" .env
+nano deploy/Caddyfile         # вписать свой домен
+
+docker compose -f docker-compose.yml -f deploy/docker-compose.caddy.yml up -d --build
+docker compose logs -f app
+```
+
+Домен должен A-записью указывать на VPS, порты 80 и 443 — свободны.
+Если HTTPS уже терминирует nginx на хосте, Caddy не нужен: хватит
+`docker compose up -d --build` и конфига `deploy/nginx.conf.example`,
+который проксирует на `127.0.0.1:8080`.
+
+### Вариант 2 — systemd без Docker
+
+```bash
+git clone <репозиторий> /opt/budget-bot && cd /opt/budget-bot
+bash deploy/install.sh          # пакеты, пользователь, venv, systemd, .env с секретами
+nano /opt/budget-bot/.env       # BOT_TOKEN, LLM_API_KEY, PUBLIC_BASE_URL, BOT_MODE=webhook
+cp deploy/nginx.conf.example /etc/nginx/sites-available/budget-bot
+ln -s /etc/nginx/sites-available/budget-bot /etc/nginx/sites-enabled/
+certbot --nginx -d budget.example.com
+systemctl start budget-bot && journalctl -u budget-bot -f
+```
+
+Скрипт ставит `fonts-dejavu-core` — им подписываются диаграммы (кириллица и знак ₽);
+в Docker-образе шрифт уже есть внутри matplotlib.
+
+Обновление:
+```bash
+cd /opt/budget-bot && git pull
+.venv/bin/pip install -r requirements.txt
+systemctl restart budget-bot
+```
+
+При `BOT_MODE=webhook` вебхук регистрируется автоматически на
+`PUBLIC_BASE_URL/tg/webhook` и проверяется секретом из `WEBHOOK_SECRET`.
+
+## Проверки
+
+```bash
+python tests/run_all.py
+```
+
+Три интеграционных прогона на временной базе, без сети и без Telegram:
+
+* `test_core.py` — балансы, деление долей, правка и удаление, отчёты, PNG-диаграммы;
+  проверяется инвариант «сумма балансов = остаток фонда»;
+* `test_api.py` — REST целиком: авторизация, создание/правка/удаление операций,
+  права доступа, статистика, отдача мини-аппы;
+* `test_handlers.py` — хендлеры бота через диспетчер с подменённой сессией Telegram:
+  команды, меню, кнопки, правка операций, inline-запросы и подтверждение черновиков.
+
+## Структура
+
+```
+app/
+  config.py              настройки из .env
+  db/
+    base.py              движок, сессии, инициализация схемы
+    models.py            Group, User, Membership, Operation, OperationShare
+  core/                  бизнес-логика, общая для бота и веба
+    money.py             разбор «850 р» / «1 200,50» / «2к», деление долей
+    categories.py        категории, цвета, словарный фолбэк
+    classifier.py        LLM-категоризация (Anthropic / OpenAI-совместимый)
+    service.py           операции, балансы, статистика, права доступа
+    periods.py           периоды и часовой пояс
+    charts.py            кольцевые диаграммы -> PNG
+    reports.py           сборка отчёта + кэш картинок
+  bot/
+    bot.py               диспетчер и роутеры
+    middlewares.py       сессия БД и пользователь в каждом апдейте
+    handlers/            menu, entry, operations, stats, inline, fallback
+    drafts.py            черновики inline-операций
+    texts.py/keyboards.py  рендер сообщений и клавиатур
+  api/
+    app.py               FastAPI + запуск бота в том же цикле
+    routes.py            REST для мини-аппы
+    auth.py              проверка initData, одноразовые ссылки, сессии
+  web/                   мини-аппа: index.html + app.js + styles.css
+Dockerfile               образ: multi-stage, non-root, healthcheck
+docker-compose.yml       запуск одним контейнером + том с базой
+deploy/                  systemd, nginx, install.sh, Caddy-оверлей для HTTPS
+scripts/check_llm.py     проверка категоризации
+```
+
+## API
+
+Все ответы — JSON, суммы в копейках. Авторизация: `Authorization: Bearer <token>`,
+токен выдают `POST /api/auth/telegram` (по `initData`) или `POST /api/auth/magic`
+(по одноразовому токену из `/web`).
+
+```
+GET    /api/me                              профиль, список групп, активная группа
+POST   /api/me/active-group/{id}            сменить активную группу
+GET    /api/categories                      справочник категорий
+GET    /api/groups/{id}/summary             фонд и балансы участников
+GET    /api/groups/{id}/members             участники
+GET    /api/groups/{id}/operations          ?scope=all|mine&period=&limit=&offset=
+POST   /api/groups/{id}/operations          создать взнос или покупку
+PATCH  /api/operations/{id}                 сумма, категория, название, участники
+DELETE /api/operations/{id}                 мягкое удаление
+GET    /api/groups/{id}/stats               ?mode=categories|people&period=month
+POST   /api/categorize                      разобрать текст покупки через LLM
+GET    /charts/{name}.png                   отрисованная диаграмма
+```
+
+Интерактивная документация — `/docs`.
+
+## Заметки по реализации
+
+* **Мягкое удаление**: операции помечаются `deleted_at`, история не теряется.
+* **Права**: править и удалять может автор операции или админ группы.
+* **Несколько групп**: пользователь состоит в любом числе бюджетов; личка и inline
+  работают с активной, групповой чат — со своей.
+* **Черновики inline** живут в памяти 30 минут; повторный ввод того же текста
+  не плодит новые — id детерминированный.
+* **Диаграммы**: не больше шести сегментов (остальное сворачивается в «Другие»),
+  прямые подписи процентов, легенда с суммами — цвет никогда не единственный
+  носитель смысла. Палитра проверена на различимость при дальтонизме.
+* **Периоды** (`месяц`, `прошлый`, `неделя`, `всё время`) считаются по
+  `TZ_OFFSET_HOURS`, а не по UTC.

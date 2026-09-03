@@ -1,0 +1,26 @@
+# Оверлей: HTTPS без ручного certbot — Caddy сам получает и продлевает сертификат.
+#
+#   docker compose -f docker-compose.yml -f deploy/docker-compose.caddy.yml up -d --build
+#
+# Перед запуском: домен должен A-записью указывать на VPS, порты 80 и 443 свободны,
+# в deploy/Caddyfile прописан ваш домен, в .env — PUBLIC_BASE_URL=https://домен
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: budget-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+
+volumes:
+  caddy-data:
+  caddy-config:

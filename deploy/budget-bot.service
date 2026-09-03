@@ -1,0 +1,24 @@
+[Unit]
+Description=Общий бюджет — Telegram-бот и веб-приложение
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=budget
+Group=budget
+WorkingDirectory=/opt/budget-bot
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/budget-bot/.venv/bin/python run.py
+Restart=always
+RestartSec=5
+
+# Один процесс: бот должен опрашивать Telegram ровно в одном экземпляре.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/budget-bot/data
+
+[Install]
+WantedBy=multi-user.target

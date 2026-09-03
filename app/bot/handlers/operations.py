@@ -1,0 +1,318 @@
+"""Список операций, карточка, правка и удаление."""
+from __future__ import annotations
+
+from aiogram import Bot, F, Router
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.types import CallbackQuery, Message
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.bot import keyboards, texts
+from app.bot.callbacks import MenuCB, OpCB, OpsPageCB
+from app.bot.common import NO_GROUP_HINT, edit_card, resolve_group, show_operation_card
+from app.bot.states import EditOperation
+from app.core import service
+from app.core.money import parse_amount
+from app.db.models import Group, User
+
+router = Router(name="operations")
+
+PAGE = 10
+
+
+async def render_operations(
+    session: AsyncSession, user: User, group: Group, *, scope: str, offset: int
+) -> tuple[str, object]:
+    author_id = user.id if scope == "mine" else None
+    operations = await service.list_operations(
+        session, group_id=group.id, author_id=author_id, limit=PAGE, offset=offset
+    )
+    total = await service.count_operations(session, group_id=group.id, author_id=author_id)
+    title = (
+        f"📒 {'Мои операции' if scope == 'mine' else 'Операции группы'} · "
+        f"{texts.esc(group.title)}"
+    )
+    if total:
+        title += f" ({offset + 1}–{offset + len(operations)} из {total})"
+
+    text = texts.operations_text(
+        operations,
+        title=title,
+        empty="Пока пусто. Добавьте взнос или покупку.",
+    )
+    text += "\n\n<i>Нажмите номер операции, чтобы открыть карточку с правкой.</i>"
+    markup = keyboards.ops_kb(
+        operations, scope=scope, offset=offset, has_more=offset + PAGE < total, page=PAGE
+    )
+    return text, markup
+
+
+@router.message(Command("ops"))
+async def ops_command(message: Message, session: AsyncSession, user: User) -> None:
+    group = await resolve_group(session, message, user)
+    if group is None:
+        await message.answer(NO_GROUP_HINT)
+        return
+    scope = "all" if message.chat.type != "private" else "mine"
+    text, markup = await render_operations(session, user, group, scope=scope, offset=0)
+    await message.answer(text, reply_markup=markup)
+
+
+@router.callback_query(MenuCB.filter(F.action == "ops"))
+async def menu_ops(
+    callback: CallbackQuery, session: AsyncSession, user: User, bot: Bot
+) -> None:
+    group = await service.resolve_active_group(session, user)
+    if group is None:
+        await edit_card(bot, callback, NO_GROUP_HINT, keyboards.back_home_kb())
+        await callback.answer()
+        return
+    text, markup = await render_operations(session, user, group, scope="mine", offset=0)
+    await edit_card(bot, callback, text, markup)
+    await callback.answer()
+
+
+@router.callback_query(OpsPageCB.filter())
+async def ops_page(
+    callback: CallbackQuery,
+    callback_data: OpsPageCB,
+    session: AsyncSession,
+    user: User,
+    bot: Bot,
+) -> None:
+    group = await service.resolve_active_group(session, user)
+    if group is None:
+        await callback.answer("Нет активной группы", show_alert=True)
+        return
+    text, markup = await render_operations(
+        session, user, group, scope=callback_data.scope, offset=callback_data.offset
+    )
+    await edit_card(bot, callback, text, markup)
+    await callback.answer()
+
+
+# --------------------------------------------------------------------------- #
+#  Карточка операции и её правка
+# --------------------------------------------------------------------------- #
+
+
+async def _load(
+    callback: CallbackQuery, session: AsyncSession, user: User, op_id: int, *, write: bool
+):
+    """Достаёт операцию и проверяет права. None — доступ закрыт, ответ уже отправлен."""
+    operation = await service.get_operation(session, op_id)
+    if operation is None:
+        await callback.answer("Операция не найдена или удалена", show_alert=True)
+        return None
+    if not await service.is_member(
+        session, group_id=operation.group_id, user_id=user.id
+    ):
+        await callback.answer("Это операция чужой группы", show_alert=True)
+        return None
+    if write and not await service.can_manage(session, operation, user):
+        await callback.answer(
+            "Править операцию может только тот, кто её внёс (или админ группы)",
+            show_alert=True,
+        )
+        return None
+    return operation
+
+
+@router.callback_query(OpCB.filter(F.action == "card"))
+async def op_card(
+    callback: CallbackQuery, callback_data: OpCB, session: AsyncSession, user: User, bot: Bot
+) -> None:
+    operation = await _load(callback, session, user, callback_data.op_id, write=False)
+    if operation is None:
+        return
+    await show_operation_card(bot, callback, session, operation)
+    await callback.answer()
+
+
+@router.callback_query(OpCB.filter(F.action == "cat"))
+async def op_categories(
+    callback: CallbackQuery, callback_data: OpCB, session: AsyncSession, user: User, bot: Bot
+) -> None:
+    operation = await _load(callback, session, user, callback_data.op_id, write=True)
+    if operation is None:
+        return
+    await edit_card(
+        bot,
+        callback,
+        f"Выберите категорию для операции <code>#{operation.id}</code> "
+        f"({texts.money(operation.amount)} — {texts.esc(operation.title or '')}):",
+        keyboards.op_categories_kb(operation.id),
+    )
+    await callback.answer()
+
+
+@router.callback_query(OpCB.filter(F.action == "setcat"))
+async def op_set_category(
+    callback: CallbackQuery, callback_data: OpCB, session: AsyncSession, user: User, bot: Bot
+) -> None:
+    operation = await _load(callback, session, user, callback_data.op_id, write=True)
+    if operation is None:
+        return
+    await service.edit_operation(session, operation, category=callback_data.value)
+    await show_operation_card(
+        bot, callback, session, operation, header="✏️ <b>Категория обновлена</b>"
+    )
+    await callback.answer("Категория обновлена")
+
+
+@router.callback_query(OpCB.filter(F.action == "parts"))
+async def op_participants(
+    callback: CallbackQuery, callback_data: OpCB, session: AsyncSession, user: User, bot: Bot
+) -> None:
+    operation = await _load(callback, session, user, callback_data.op_id, write=True)
+    if operation is None:
+        return
+    members = await service.group_members(session, operation.group_id)
+    await edit_card(
+        bot,
+        callback,
+        f"Между кем делится операция <code>#{operation.id}</code> "
+        f"({texts.money(operation.amount)})?\nНажмите, чтобы включить или исключить.",
+        keyboards.op_participants_kb(operation, members),
+    )
+    await callback.answer()
+
+
+@router.callback_query(OpCB.filter(F.action == "toggle"))
+async def op_toggle_participant(
+    callback: CallbackQuery, callback_data: OpCB, session: AsyncSession, user: User, bot: Bot
+) -> None:
+    operation = await _load(callback, session, user, callback_data.op_id, write=True)
+    if operation is None:
+        return
+
+    target = int(callback_data.value)
+    current = [share.user_id for share in operation.shares]
+    if target in current:
+        if len(current) == 1:
+            await callback.answer("Нужен хотя бы один участник", show_alert=True)
+            return
+        current.remove(target)
+    else:
+        current.append(target)
+
+    await service.edit_operation(session, operation, participant_ids=current)
+    members = await service.group_members(session, operation.group_id)
+    await edit_card(
+        bot,
+        callback,
+        f"Между кем делится операция <code>#{operation.id}</code> "
+        f"({texts.money(operation.amount)})?\n"
+        f"Сейчас: по {texts.money(operation.shares[0].amount)} с человека.",
+        keyboards.op_participants_kb(operation, members),
+    )
+    await callback.answer()
+
+
+@router.callback_query(OpCB.filter(F.action == "amount"))
+async def op_amount_prompt(
+    callback: CallbackQuery,
+    callback_data: OpCB,
+    session: AsyncSession,
+    user: User,
+    state: FSMContext,
+    bot: Bot,
+) -> None:
+    operation = await _load(callback, session, user, callback_data.op_id, write=True)
+    if operation is None:
+        return
+
+    await state.set_state(EditOperation.amount)
+    await state.update_data(
+        op_id=operation.id, inline_message_id=callback.inline_message_id
+    )
+    where = (
+        "Отправьте новую сумму боту в личку."
+        if callback.inline_message_id
+        else "Отправьте новую сумму сообщением."
+    )
+    await edit_card(
+        bot,
+        callback,
+        f"✏️ Новая сумма для операции <code>#{operation.id}</code>\n"
+        f"Сейчас: <b>{texts.money(operation.amount)}</b>. {where}",
+        keyboards.operation_kb(operation, compact=True),
+    )
+    await callback.answer()
+
+
+@router.message(EditOperation.amount, F.text)
+async def op_amount_set(
+    message: Message, session: AsyncSession, user: User, state: FSMContext, bot: Bot
+) -> None:
+    amount, _ = parse_amount(message.text)
+    if amount is None:
+        await message.answer("Не понял сумму. Напишите числом, например <code>850</code>.")
+        return
+
+    data = await state.get_data()
+    await state.clear()
+
+    operation = await service.get_operation(session, int(data.get("op_id", 0)))
+    if operation is None or not await service.can_manage(session, operation, user):
+        await message.answer("Операция не найдена или недоступна для правки.")
+        return
+
+    await service.edit_operation(session, operation, amount=amount)
+    group = await session.get(Group, operation.group_id)
+    members = await service.group_members(session, operation.group_id)
+    card = texts.operation_card(
+        operation,
+        group=group,
+        header="✏️ <b>Сумма обновлена</b>",
+        members_total=len(members),
+    )
+    await message.answer(card, reply_markup=keyboards.operation_kb(operation, compact=True))
+
+    inline_message_id = data.get("inline_message_id")
+    if inline_message_id:
+        await bot.edit_message_text(
+            text=card,
+            inline_message_id=inline_message_id,
+            reply_markup=keyboards.operation_kb(operation, compact=True),
+        )
+
+
+@router.callback_query(OpCB.filter(F.action == "del"))
+async def op_delete_confirm(
+    callback: CallbackQuery, callback_data: OpCB, session: AsyncSession, user: User, bot: Bot
+) -> None:
+    operation = await _load(callback, session, user, callback_data.op_id, write=True)
+    if operation is None:
+        return
+    await edit_card(
+        bot,
+        callback,
+        f"Удалить операцию <code>#{operation.id}</code> на "
+        f"<b>{texts.money(operation.amount)}</b>?\n"
+        "<i>Она исчезнет из балансов и статистики.</i>",
+        keyboards.confirm_delete_kb(operation.id),
+    )
+    await callback.answer()
+
+
+@router.callback_query(OpCB.filter(F.action == "delyes"))
+async def op_delete(
+    callback: CallbackQuery, callback_data: OpCB, session: AsyncSession, user: User, bot: Bot
+) -> None:
+    operation = await _load(callback, session, user, callback_data.op_id, write=True)
+    if operation is None:
+        return
+
+    group = await session.get(Group, operation.group_id)
+    await service.delete_operation(session, operation)
+    data = await service.summary(session, group=group)
+    await edit_card(
+        bot,
+        callback,
+        f"🗑 Операция <code>#{operation.id}</code> на "
+        f"{texts.money(operation.amount)} удалена.\n"
+        f"💼 В фонде: <b>{texts.money(data.fund_left)}</b>",
+        keyboards.back_home_kb(),
+    )
+    await callback.answer("Удалено")

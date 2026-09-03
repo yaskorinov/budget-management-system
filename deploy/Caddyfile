@@ -1,0 +1,10 @@
+# Замените домен на свой. Сертификат Let's Encrypt Caddy получит сам.
+budget.example.com {
+    encode zstd gzip
+
+    # Диаграммы для inline-режима забирает Telegram — их можно кэшировать.
+    @charts path /charts/*
+    header @charts Cache-Control "public, max-age=600"
+
+    reverse_proxy app:8080
+}

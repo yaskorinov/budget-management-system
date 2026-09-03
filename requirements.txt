@@ -1,0 +1,12 @@
+aiogram==3.24.0
+sqlalchemy[asyncio]==2.0.44
+aiosqlite==0.21.0
+pydantic-settings==2.13.0
+fastapi==0.121.2
+uvicorn[standard]==0.41.0
+itsdangerous==2.2.0
+matplotlib==3.10.7
+anthropic>=0.75
+httpx>=0.28
+# Postgres (опционально, если DATABASE_URL=postgresql+asyncpg://...)
+# asyncpg==0.31.0

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Общий бюджет</title>
+<link rel="stylesheet" href="/styles.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+<div id="auth" class="screen">
+  <div class="card center">
+    <div class="logo">💼</div>
+    <h1>Общий бюджет</h1>
+    <p class="muted" id="auth-text">Проверяем вход…</p>
+    <p class="muted small">Чтобы войти из браузера, отправьте боту команду <code>/web</code>
+      и откройте полученную ссылку.</p>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header class="topbar">
+    <div class="topbar-row">
+      <select id="group-select" aria-label="Бюджет"></select>
+      <button id="reload" class="icon-btn" title="Обновить">⟳</button>
+    </div>
+    <div class="hero">
+      <div class="hero-label">Осталось в фонде</div>
+      <div class="hero-value" id="fund">—</div>
+      <div class="hero-sub" id="fund-sub"></div>
+    </div>
+    <div id="balances" class="balances"></div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="add" role="tab">Добавить</button>
+    <button class="tab" data-tab="ops" role="tab">Операции</button>
+    <button class="tab" data-tab="stats" role="tab">Статистика</button>
+  </nav>
+
+  <main>
+    <section id="tab-add" class="tab-panel active">
+      <div class="card">
+        <div class="segmented" id="kind-switch">
+          <button class="seg active" data-kind="purchase">🛒 Покупка</button>
+          <button class="seg" data-kind="contribution">💰 Взнос в фонд</button>
+        </div>
+
+        <div id="purchase-fields">
+          <label class="field">
+            <span>Что купили и на сколько</span>
+            <input id="raw-text" type="text" placeholder="молоко хлеб яйца 850"
+                   autocomplete="off">
+          </label>
+          <button id="parse-btn" class="ghost-btn">✨ Разобрать через ИИ</button>
+        </div>
+
+        <label class="field">
+          <span>Сумма, ₽</span>
+          <input id="amount" type="text" inputmode="decimal" placeholder="850">
+        </label>
+
+        <label class="field" id="title-field">
+          <span>Название</span>
+          <input id="title" type="text" placeholder="Продукты">
+        </label>
+
+        <div class="field" id="category-field">
+          <span>Категория</span>
+          <div id="categories" class="chips"></div>
+        </div>
+
+        <div class="field" id="participants-field">
+          <span>Делим между</span>
+          <div id="participants" class="chips"></div>
+        </div>
+
+        <button id="submit" class="primary-btn">Записать</button>
+        <p id="add-status" class="status"></p>
+      </div>
+    </section>
+
+    <section id="tab-ops" class="tab-panel">
+      <div class="card">
+        <div class="segmented small" id="scope-switch">
+          <button class="seg active" data-scope="all">Все</button>
+          <button class="seg" data-scope="mine">Только мои</button>
+        </div>
+        <div id="ops-list" class="ops"></div>
+      </div>
+    </section>
+
+    <section id="tab-stats" class="tab-panel">
+      <div class="card">
+        <div class="segmented small" id="mode-switch">
+          <button class="seg active" data-mode="categories">По категориям</button>
+          <button class="seg" data-mode="people">По людям</button>
+        </div>
+        <div class="segmented small" id="period-switch">
+          <button class="seg active" data-period="month">Месяц</button>
+          <button class="seg" data-period="prev_month">Прошлый</button>
+          <button class="seg" data-period="week">Неделя</button>
+          <button class="seg" data-period="all">Всё время</button>
+        </div>
+        <figure class="chart">
+          <canvas id="donut" width="640" height="640" role="img"
+                  aria-label="Круговая диаграмма расходов"></canvas>
+          <figcaption id="chart-total"></figcaption>
+        </figure>
+        <table class="legend" id="legend">
+          <thead><tr><th>Категория</th><th>Сумма</th><th>Доля</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+<script src="/app.js"></script>
+</body>
+</html>

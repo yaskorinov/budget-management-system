@@ -1,0 +1,44 @@
+name: budget-bot
+
+services:
+  app:
+    build: .
+    image: budget-bot:latest
+    container_name: budget-bot
+    restart: unless-stopped
+
+    # Секреты и настройки берутся из .env (скопируйте .env.example).
+    env_file: .env
+    environment:
+      # В контейнере слушаем все интерфейсы; наружу порт публикуется ниже.
+      HOST: 0.0.0.0
+      PORT: "8080"
+      DATABASE_URL: sqlite+aiosqlite:///./data/expenses.db
+
+    # Только localhost: наружу пускает nginx или Caddy (см. deploy/).
+    ports:
+      - "127.0.0.1:8080:8080"
+
+    # Именованный том: Docker сам заводит его с правами пользователя app.
+    volumes:
+      - budget-data:/app/data
+
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3).status == 200 else 1)
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  budget-data:

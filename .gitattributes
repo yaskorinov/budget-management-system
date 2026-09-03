@@ -1,0 +1,4 @@
+# Проект разворачивается на Linux: в репозитории и при выгрузке — только LF,
+# иначе deploy/install.sh и Dockerfile ломаются на VPS.
+* text=auto eol=lf
+*.png binary
