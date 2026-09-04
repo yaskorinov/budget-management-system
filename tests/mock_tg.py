@@ -80,11 +80,18 @@ class MockSession(BaseSession):
                 if name == "SendPhoto"
                 else None
             )
+            animation = (
+                Animation(file_id="anim-id", file_unique_id="anim", width=320,
+                          height=320, duration=2)
+                if (data.get("rich_message") or {}).get("media")
+                else None
+            )
             return Message(
                 message_id=self._msg_id,
                 date=dt.datetime.now(),
                 chat=Chat(id=data.get("chat_id", 1), type="private"),
                 from_user=BOT_USER,
+                animation=animation,
                 text=None if photo else (
                     data.get("text")
                     or (data.get("rich_message") or {}).get("markdown")

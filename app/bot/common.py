@@ -9,6 +9,8 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import (
     CallbackQuery,
     FSInputFile,
+    InputMediaAnimation,
+    InputRichMessageMedia,
     InlineKeyboardMarkup,
     InputRichMessage,
     Message,
@@ -100,32 +102,27 @@ GIF_DIR = BASE_DIR / "gifs"
 _gif_ids: dict[str, str] = {}  # file_id уже загруженных роликов
 
 
-async def send_reaction_gif(message: Message, name: str) -> None:
-    """Ролик после записи операции: topup — пополнение, buy — покупка.
+def gif_block(name: str) -> tuple[str, list[InputRichMessageMedia]]:
+    """Медиа-блок для rich-сообщения: ролик и карточка уходят одним сообщением.
 
-    Первый раз файл загружается, дальше отправляется по file_id: гонять один
-    и тот же ролик в Telegram на каждую покупку незачем. Файла нет — молча
-    пропускаем, операция уже записана и без него.
+    Ролик подставляется в разметку ссылкой tg://video?id=, а сам файл едет в
+    поле media. Первый раз файл загружается, дальше отправляется по file_id.
+    Файла нет — возвращаем пустую разметку, карточка уйдёт без ролика.
     """
-    cached = _gif_ids.get(name)
     path = GIF_DIR / f"{name}.mp4"
+    cached = _gif_ids.get(name)
     if cached is None and not path.exists():
-        return
+        return "", []
 
-    try:
-        sent = await message.bot.send_animation(
-            chat_id=message.chat.id,
-            message_thread_id=_thread_id(message),
-            animation=cached or FSInputFile(path),
-            disable_notification=True,  # уведомление придёт от самой карточки
-        )
-    except Exception as exc:
-        # Ролик — украшение: что бы с ним ни случилось, карточку операции
-        # это ломать не должно. Протухший file_id заодно выбрасываем.
-        _gif_ids.pop(name, None)
-        log.warning("Ролик %s не отправился (%s)", name, exc)
-        return
+    media = InputRichMessageMedia(
+        id=name,
+        media=InputMediaAnimation(media=cached or FSInputFile(path)),
+    )
+    return f"![](tg://video?id={name})", [media]
 
+
+def remember_gif(name: str, sent: Message) -> None:
+    """Запоминает file_id, чтобы не заливать один и тот же ролик каждый раз."""
     animation = getattr(sent, "animation", None)
     if animation is not None:
         _gif_ids[name] = animation.file_id
@@ -137,20 +134,41 @@ async def answer_rich(
     *,
     reply_markup: InlineKeyboardMarkup | None = None,
     reply: bool = False,
+    gif: str | None = None,
 ) -> Message:
     """Отправляет rich-сообщение: заголовки, таблицы, списки, сворачиваемые блоки.
 
     Это отдельный метод API (sendRichMessage), а не sendMessage с parse_mode.
+    С gif ролик уходит тем же сообщением, отдельным блоком над текстом.
     """
-    return await message.bot.send_rich_message(
-        chat_id=message.chat.id,
-        message_thread_id=_thread_id(message),
-        rich_message=InputRichMessage(markdown=str(markdown)),
-        reply_markup=reply_markup,
-        reply_parameters=(
-            ReplyParameters(message_id=message.message_id) if reply else None
-        ),
-    )
+    block, media = gif_block(gif) if gif else ("", [])
+    text = block + chr(10) * 2 + str(markdown) if block else str(markdown)
+
+    async def send(body: str, attachments: list[InputRichMessageMedia]) -> Message:
+        return await message.bot.send_rich_message(
+            chat_id=message.chat.id,
+            message_thread_id=_thread_id(message),
+            rich_message=InputRichMessage(markdown=body, media=attachments or None),
+            reply_markup=reply_markup,
+            reply_parameters=(
+                ReplyParameters(message_id=message.message_id) if reply else None
+            ),
+        )
+
+    if not media:
+        return await send(text, [])
+
+    try:
+        sent = await send(text, media)
+    except Exception as exc:
+        # Ролик — украшение: карточку он ломать не должен. Протухший file_id
+        # заодно выбрасываем, в следующий раз файл зальётся заново.
+        _gif_ids.pop(gif, None)
+        log.warning("Ролик %s не отправился (%s)", gif, exc)
+        return await send(str(markdown), [])
+
+    remember_gif(gif, sent)
+    return sent
 
 
 async def edit_card(

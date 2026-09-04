@@ -418,25 +418,28 @@ async def main():
         assert await service.get_operation(db, op_id) is None, "операция должна быть удалена"
     print("### админ чата удаляет чужую операцию ✓")
 
-    # ---- ролики после операций ----
+    # ---- ролики уходят одним сообщением с карточкой ----
     session.reset()
     await dp.feed_update(bot, upd(message=msg("/add 1500", ANYA, GROUP)))
-    kinds = [name for name, _ in session.calls]
-    assert "SendAnimation" in kinds, kinds
-    assert kinds.index("SendAnimation") < kinds.index("SendRichMessage"), \
-        "ролик должен идти перед карточкой, чтобы карточка осталась последней"
-    print("\n### после пополнения уходит ролик topup ✓")
+    sent = session.find("SendRichMessage")[-1]
+    assert not session.find("SendAnimation"), "ролик не должен идти отдельным сообщением"
+    assert sent["rich_message"]["media"][0]["id"] == "topup", sent["rich_message"]
+    assert "tg://video?id=topup" in sent["rich_message"]["markdown"]
+    assert "Взнос в фонд" in sent["rich_message"]["markdown"], "текст в том же сообщении"
+    print("")
+    print("### пополнение: ролик и карточка одним сообщением ✓")
 
     session.reset()
     await dp.feed_update(bot, upd(message=msg("/buy кофе 400", ANYA, GROUP)))
-    assert "SendAnimation" in [name for name, _ in session.calls]
-    print("### после покупки уходит ролик buy ✓")
+    sent = session.find("SendRichMessage")[-1]
+    assert sent["rich_message"]["media"][0]["id"] == "buy", sent["rich_message"]
+    print("### покупка: ролик buy в том же сообщении ✓")
 
-    # второй раз тот же ролик уходит по file_id, без повторной загрузки
+    # второй раз файл не перезаливается — уходит file_id
     session.reset()
     await dp.feed_update(bot, upd(message=msg("/buy чай 200", ANYA, GROUP)))
-    animation = session.find("SendAnimation")[-1]["animation"]
-    assert animation == "anim-id", f"ожидался file_id, пришло: {animation!r}"
+    media = session.find("SendRichMessage")[-1]["rich_message"]["media"][0]["media"]
+    assert media["media"] == "anim-id", f"ожидался file_id, пришло: {media['media']!r}"
     print("### повторная отправка идёт по file_id ✓")
 
     # сбой ролика не мешает записать операцию
@@ -444,12 +447,13 @@ async def main():
 
     _gif_ids.clear()
     session.reset()
-    session.fail_on.add("SendAnimation")
+    session.fail_on.add("SendRichMessage")
     logging.getLogger("app.bot.common").setLevel(logging.CRITICAL)
     await dp.feed_update(bot, upd(message=msg("/buy хлеб 90", ANYA, GROUP)))
     logging.getLogger("app.bot.common").setLevel(logging.NOTSET)
-    out = session.texts()
-    assert any("Хлеб" in text for text in out), out  # в суммах неразрывный пробел
+    retry = session.find("SendRichMessage")[-1]
+    assert not retry["rich_message"].get("media"), "повтор должен уйти без ролика"
+    assert "Хлеб" in retry["rich_message"]["markdown"], retry
     print("### упавший ролик не мешает карточке ✓")
 
 
