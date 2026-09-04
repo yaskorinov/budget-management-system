@@ -234,7 +234,7 @@ HEADER_H = 1.15  # заголовок и подзаголовок
 DONUT_H = 4.6
 BOTTOM_H = 0.32
 RING_WIDTH = 0.38  # толщина кольца в долях радиуса
-AXIS_LIMIT = 1.22  # запас под подписи процентов снаружи кольца
+AXIS_LIMIT = 1.04  # подписей снаружи нет, поэтому запас минимальный
 SEGMENT_GAP_DEG = 3.0  # зазор между сегментами
 
 CHIP_FONT = 13.5
@@ -429,22 +429,12 @@ def _draw_ring(ax, slices: list[Slice], total: int) -> None:
 def _draw_segment_marks(
     ax, item: Slice, start: float, end: float, band: float, total: int
 ) -> None:
-    """Иконка внутри сегмента и процент снаружи кольца."""
-    share = item.value / total
+    """Иконка внутри сегмента. Проценты живут на плашках — см. render_donut."""
+    if not item.icon or item.value / total < 0.07:
+        return  # в узкой доле иконка не читается
     middle = math.radians((start + end) / 2)
-    x, y = math.cos(middle), math.sin(middle)
-
-    # Иконка помещается, только если сегмент не совсем узкий
-    if item.icon and share >= 0.07:
-        _draw_icon(ax, item.icon, band * x, band * y, RING_WIDTH * 0.62)
-
-    if share >= 0.03:
-        outside = 1.09
-        ax.text(
-            outside * x, outside * y, f"{share * 100:.0f}%",
-            ha="center", va="center",
-            color=INK_SECONDARY, fontsize=12.5, fontweight="bold",
-        )
+    _draw_icon(ax, item.icon, band * math.cos(middle), band * math.sin(middle),
+               RING_WIDTH * 0.52)
 
 
 def render_donut(
@@ -474,6 +464,7 @@ def render_donut(
 
     labels = [
         f"{_short_label(item.label)} · {format_money(item.value, symbol)}"
+        + f" · {item.value / total * 100:.0f}%"
         for item in slices
     ]
     widths = _measure_chips(labels, plt)
