@@ -7,7 +7,7 @@ from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InputRichMessage, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards, texts
@@ -15,6 +15,7 @@ from app.bot.callbacks import MenuCB, OpCB, OpsPageCB
 from app.bot.common import (
     NO_GROUP_HINT,
     answer_rich,
+    gif_block,
     edit_card,
     group_for_callback,
     is_chat_admin,
@@ -188,7 +189,12 @@ async def op_set_category(
         return
     await service.edit_operation(session, operation, category=callback_data.value)
     await show_operation_card(
-        bot, callback, session, operation, header=texts.join("✏️ ", texts.bold("Категория обновлена"))
+        bot,
+        callback,
+        session,
+        operation,
+        header=texts.join("✏️ ", texts.bold("Категория обновлена")),
+        gif="edit",
     )
     await callback.answer("Категория обновлена")
 
@@ -326,33 +332,44 @@ async def op_amount_set(
     )
     markup = keyboards.operation_kb(operation, compact=True)
 
-    # Правим ту же карточку, чтобы в чате не оставалось устаревшей копии.
-    updated = False
+    # Правим ту же карточку, чтобы в чате не оставалось устаревшей копии
+    block, media = gif_block("edit")
+    rich = InputRichMessage(
+        markdown=(block + chr(10) * 2 + str(card)) if block else str(card),
+        media=media or None,
+    )
+    target = {}
     if data.get("inline_message_id"):
-        with suppress(TelegramBadRequest):
-            await bot.edit_message_text(
-                text=card, inline_message_id=data["inline_message_id"], reply_markup=markup
-            )
-            updated = True
+        target = {"inline_message_id": data["inline_message_id"]}
     elif data.get("prompt_chat_id") and data.get("prompt_id"):
-        with suppress(TelegramBadRequest):
-            await bot.edit_message_text(
-                text=card,
-                chat_id=data["prompt_chat_id"],
-                message_id=data["prompt_id"],
-                reply_markup=markup,
-            )
+        target = {"chat_id": data["prompt_chat_id"], "message_id": data["prompt_id"]}
+
+    updated = False
+    if target:
+        try:
+            await bot.edit_message_text(rich_message=rich, reply_markup=markup, **target)
             updated = True
+        except TelegramBadRequest:
+            # Ролик мог не пройти (например, в inline-сообщении) — правим без него
+            with suppress(TelegramBadRequest):
+                await bot.edit_message_text(
+                    rich_message=InputRichMessage(markdown=str(card)),
+                    reply_markup=markup,
+                    **target,
+                )
+                updated = True
 
     if updated:
-        await answer_rich(message, reply=True, markdown=
-            texts.join(
+        await answer_rich(
+            message,
+            reply=True,
+            markdown=texts.join(
                 "✏️ ", texts.code("#" + str(operation.id)), " — теперь ",
                 texts.bold(texts.money(operation.amount)),
-            )
+            ),
         )
     else:
-        await answer_rich(message, card, reply_markup=markup)
+        await answer_rich(message, card, reply_markup=markup, gif="edit")
 
 
 @router.callback_query(OpCB.filter(F.action == "del"))

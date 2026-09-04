@@ -176,14 +176,21 @@ async def edit_card(
     callback: CallbackQuery,
     markdown: object,
     markup: InlineKeyboardMarkup | None = None,
+    *,
+    gif: str | None = None,
 ) -> None:
     """Показывает rich-содержимое на месте нажатой кнопки.
 
     Сообщение с картинкой (диаграмма) текстом не правится — Telegram отвечает
     «there is no text in the message to edit», поэтому его заменяем новым.
+    С gif к карточке прикладывается ролик; если Telegram его не принял,
+    карточка правится без ролика — содержимое важнее украшения.
     """
-    rich = InputRichMessage(markdown=str(markdown))
-    try:
+    block, media = gif_block(gif) if gif else ("", [])
+    text = block + chr(10) * 2 + str(markdown) if block else str(markdown)
+
+    async def apply(body: str, attachments: list[InputRichMessageMedia]) -> None:
+        rich = InputRichMessage(markdown=body, media=attachments or None)
         if callback.inline_message_id:
             await bot.edit_message_text(
                 rich_message=rich,
@@ -196,7 +203,7 @@ async def edit_card(
         if message is None:
             return
 
-        if getattr(message, "text", None) is None:
+        if getattr(message, "text", None) is None and not attachments:
             with suppress(TelegramBadRequest):
                 await message.delete()
             await bot.send_rich_message(
@@ -213,9 +220,18 @@ async def edit_card(
             message_id=message.message_id,
             reply_markup=markup,
         )
+
+    try:
+        await apply(text, media)
     except TelegramBadRequest as exc:
-        if "message is not modified" not in str(exc):
+        if "message is not modified" in str(exc):
+            return
+        if not media:
             raise
+        _gif_ids.pop(gif, None)
+        log.warning("Ролик %s не приложился к карточке (%s)", gif, exc)
+        with suppress(TelegramBadRequest):
+            await apply(str(markdown), [])
 
 
 async def group_for_callback(session: AsyncSession, callback: CallbackQuery, user: User):
@@ -247,6 +263,7 @@ async def show_operation_card(
     operation,
     *,
     header: str | None = None,
+    gif: str | None = None,
 ) -> None:
     from app.bot import keyboards
 
@@ -259,4 +276,5 @@ async def show_operation_card(
             operation, group=group, header=header, members_total=len(members)
         ),
         keyboards.operation_kb(operation, private=is_private(callback)),
+        gif=gif,
     )

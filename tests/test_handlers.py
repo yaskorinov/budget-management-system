@@ -480,6 +480,37 @@ async def main():
     assert remove and remove[0].style == "danger", remove
     print("\n### удаление красное, правка синяя ✓")
 
+    # ---- ролик при правке ----
+    from app.bot.common import _gif_ids
+
+    _gif_ids.clear()
+    session.reset()
+    await dp.feed_update(bot, upd(message=msg("/buy сахар 120", ANYA, GROUP)))
+    async with session_scope() as db:
+        group = await service.get_or_create_group_for_chat(
+            db, tg_chat_id=GROUP.id, title=GROUP.title)
+        fresh = (await service.list_operations(db, group_id=group.id, limit=1))[0].id
+
+    session.reset()
+    await press(f"o:setcat:{fresh}:household", ANYA, GROUP)
+    edited = session.find("EditMessageText")[-1]["rich_message"]
+    assert edited["media"][0]["id"] == "edit", edited
+    assert "tg://video?id=edit" in edited["markdown"]
+    assert "Категория обновлена" in edited["markdown"], edited["markdown"]
+    print("\n### смена категории: карточка с роликом edit ✓")
+
+    # правка суммы обновляет карточку разметкой, а не сырым текстом
+    session.reset()
+    await press(f"o:amount:{fresh}:", ANYA, GROUP)
+    prompt_id = session.find("EditMessageText")[-1].get("message_id")
+    session.reset()
+    await dp.feed_update(bot, upd(message=msg("777", ANYA, GROUP, reply_to=bot_msg(prompt_id))))
+    card = session.find("EditMessageText")[-1]
+    assert "rich_message" in card and "text" not in card, "карточка должна уходить rich-разметкой"
+    assert card["rich_message"]["media"][0]["id"] == "edit", card["rich_message"]
+    print("### правка суммы: карточка rich-разметкой и с роликом ✓")
+
+
 
 
 
