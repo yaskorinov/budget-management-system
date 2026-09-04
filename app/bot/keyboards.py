@@ -60,7 +60,9 @@ def draft_kb(draft_id: str, *, with_category: bool = True) -> InlineKeyboardMark
     builder.button(text="✖️ Отмена", callback_data=DraftCB(action="cancel", draft_id=draft_id))
     if with_category:
         builder.button(
-            text="✏️ Категория", callback_data=DraftCB(action="cat", draft_id=draft_id)
+            text="✏️ Категория",
+            callback_data=DraftCB(action="cat", draft_id=draft_id),
+            style="primary",
         )
     builder.adjust(2, 1)
     return builder.as_markup()
@@ -83,10 +85,26 @@ def operation_kb(
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     if operation.is_purchase:
-        builder.button(text="✏️ Категория", callback_data=OpCB(action="cat", op_id=operation.id))
-        builder.button(text="👥 Участники", callback_data=OpCB(action="parts", op_id=operation.id))
-    builder.button(text="✏️ Сумма", callback_data=OpCB(action="amount", op_id=operation.id))
-    builder.button(text="🗑 Удалить", callback_data=OpCB(action="del", op_id=operation.id))
+        builder.button(
+            text="✏️ Категория",
+            callback_data=OpCB(action="cat", op_id=operation.id),
+            style="primary",
+        )
+        builder.button(
+            text="👥 Участники",
+            callback_data=OpCB(action="parts", op_id=operation.id),
+            style="primary",
+        )
+    builder.button(
+        text="✏️ Сумма",
+        callback_data=OpCB(action="amount", op_id=operation.id),
+        style="primary",
+    )
+    builder.button(
+        text="🗑 Удалить",
+        callback_data=OpCB(action="del", op_id=operation.id),
+        style="danger",
+    )
     if not compact and private:
         builder.button(text="⬅️ В меню", callback_data=MenuCB(action="home"))
     builder.adjust(2, 2, 1)
@@ -121,7 +139,11 @@ def op_participants_kb(operation: Operation, members: list[User]) -> InlineKeybo
 
 def confirm_delete_kb(op_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="🗑 Да, удалить", callback_data=OpCB(action="delyes", op_id=op_id))
+    builder.button(
+        text="🗑 Да, удалить",
+        callback_data=OpCB(action="delyes", op_id=op_id),
+        style="danger",
+    )
     builder.button(text="⬅️ Отмена", callback_data=OpCB(action="card", op_id=op_id))
     builder.adjust(2)
     return builder.as_markup()
@@ -143,7 +165,9 @@ def stats_kb(mode: str, period: str, *, private: bool = True) -> InlineKeyboardM
     if private:
         builder.button(text="⬅️ В меню", callback_data=MenuCB(action="home"))
     else:
-        builder.button(text="🗑 Удалить", callback_data=MenuCB(action="close"))
+        builder.button(
+            text="🗑 Удалить", callback_data=MenuCB(action="close"), style="danger"
+        )
     builder.adjust(2, 2, 2, 1)
     return builder.as_markup()
 

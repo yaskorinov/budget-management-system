@@ -170,6 +170,10 @@ code {
   border-radius: 8px; padding: 4px 8px; font-size: 12px; cursor: pointer;
 }
 
+/* Правка — синим, удаление — красным: то же, что style у кнопок бота */
+.mini-btn.edit { border-color: var(--accent); color: var(--accent); }
+.mini-btn.danger { border-color: var(--bad); color: var(--bad); }
+
 .chart { margin: 6px 0 14px; text-align: center; }
 #donut { width: 100%; max-width: 320px; height: auto; }
 figcaption { color: var(--muted); font-size: 13px; margin-top: 6px; }

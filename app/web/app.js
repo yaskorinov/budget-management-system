@@ -270,9 +270,9 @@ async function loadOperations() {
     right.appendChild(el('div', 'op-sum', money(operation.amount)));
     if (operation.can_edit) {
       const actions = el('div', 'op-actions');
-      const edit = el('button', 'mini-btn', '✏️');
+      const edit = el('button', 'mini-btn edit', '✏️');
       edit.onclick = () => startEdit(operation);
-      const remove = el('button', 'mini-btn', '🗑');
+      const remove = el('button', 'mini-btn danger', '🗑');
       remove.onclick = () => removeOperation(operation);
       actions.append(edit, remove);
       right.appendChild(actions);

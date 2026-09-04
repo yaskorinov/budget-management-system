@@ -456,6 +456,31 @@ async def main():
     assert "Хлеб" in retry["rich_message"]["markdown"], retry
     print("### упавший ролик не мешает карточке ✓")
 
+    # ---- цвета кнопок ----
+    from app.bot import keyboards
+
+    class _Op:
+        id, is_purchase, shares = 1, True, []
+
+    styles = {
+        button.text: button.style
+        for row in keyboards.operation_kb(_Op()).inline_keyboard
+        for button in row
+    }
+    assert styles["🗑 Удалить"] == "danger", styles
+    assert styles["✏️ Сумма"] == "primary", styles
+    assert styles["✏️ Категория"] == "primary", styles
+
+    confirm = keyboards.confirm_delete_kb(1).inline_keyboard[0]
+    assert confirm[0].style == "danger", confirm[0]
+    assert confirm[1].style is None, "отмена — обычная кнопка"
+
+    group_stats = keyboards.stats_kb("categories", "month", private=False)
+    remove = [b for row in group_stats.inline_keyboard for b in row if "Удалить" in b.text]
+    assert remove and remove[0].style == "danger", remove
+    print("\n### удаление красное, правка синяя ✓")
+
+
 
 
 
