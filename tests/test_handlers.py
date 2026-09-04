@@ -510,6 +510,30 @@ async def main():
     assert card["rich_message"]["media"][0]["id"] == "edit", card["rich_message"]
     print("### правка суммы: карточка rich-разметкой и с роликом ✓")
 
+    # карточка с роликом правится на месте, а не пересоздаётся
+    from aiogram.types import Animation
+
+    def card_with_gif(chat, message_id=8888):
+        """Карточка, отправленная с медиа-блоком: текста у неё нет."""
+        return Message(
+            message_id=message_id, date=dt.datetime.now(), chat=chat,
+            from_user=TgUser(id=999, is_bot=True, first_name="Bot"),
+            animation=Animation(file_id="anim-id", file_unique_id="anim",
+                                width=320, height=320, duration=2),
+        )
+
+    session.reset()
+    cb = CallbackQuery(id="e1", from_user=ANYA, chat_instance="x",
+                       data=f"o:parts:{fresh}:", message=card_with_gif(GROUP)).as_(bot)
+    await dp.feed_update(bot, upd(callback_query=cb))
+    assert not session.find("DeleteMessage"), "карточку с роликом нельзя пересоздавать"
+    edited = session.find("EditMessageText")[-1]
+    assert edited["message_id"] == 8888, edited
+    kept = edited["rich_message"]["media"][0]["media"]
+    assert kept["media"] == "anim-id", f"ролик должен сохраниться: {kept}"
+    print("\n### карточка с роликом правится на месте ✓")
+
+
 
 
 

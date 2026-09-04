@@ -121,6 +121,22 @@ def gif_block(name: str) -> tuple[str, list[InputRichMessageMedia]]:
     return f"![](tg://video?id={name})", [media]
 
 
+def kept_gif_block(message) -> tuple[str, list[InputRichMessageMedia]]:
+    """Сохраняет ролик, который уже есть в сообщении.
+
+    Сообщение с медиа нельзя превратить в текстовое правкой, а терять его и
+    слать новое — значит гонять карточку в конец чата. Поэтому при правке
+    прикладываем тот же ролик по его file_id.
+    """
+    animation = getattr(message, "animation", None)
+    if animation is None:
+        return "", []
+    media = InputRichMessageMedia(
+        id="kept", media=InputMediaAnimation(media=animation.file_id)
+    )
+    return "![](tg://video?id=kept)", [media]
+
+
 def remember_gif(name: str, sent: Message) -> None:
     """Запоминает file_id, чтобы не заливать один и тот же ролик каждый раз."""
     animation = getattr(sent, "animation", None)
@@ -181,12 +197,13 @@ async def edit_card(
 ) -> None:
     """Показывает rich-содержимое на месте нажатой кнопки.
 
-    Сообщение с картинкой (диаграмма) текстом не правится — Telegram отвечает
-    «there is no text in the message to edit», поэтому его заменяем новым.
-    С gif к карточке прикладывается ролик; если Telegram его не принял,
-    карточка правится без ролика — содержимое важнее украшения.
+    Правим существующее сообщение: так карточка остаётся на своём месте в
+    переписке. Отправка нового оставлена запасным путём — на случай, когда
+    сообщение правкой не берётся (диаграмма отправлена как фотография).
     """
-    block, media = gif_block(gif) if gif else ("", [])
+    block, media = (
+        gif_block(gif) if gif else kept_gif_block(callback.message)
+    )
     text = block + chr(10) * 2 + str(markdown) if block else str(markdown)
 
     async def apply(body: str, attachments: list[InputRichMessageMedia]) -> None:
@@ -198,40 +215,51 @@ async def edit_card(
                 reply_markup=markup,
             )
             return
-
-        message = callback.message
-        if message is None:
-            return
-
-        if getattr(message, "text", None) is None and not attachments:
-            with suppress(TelegramBadRequest):
-                await message.delete()
-            await bot.send_rich_message(
-                chat_id=message.chat.id,
-                message_thread_id=_thread_id(message),
-                rich_message=rich,
-                reply_markup=markup,
-            )
-            return
-
         await bot.edit_message_text(
             rich_message=rich,
-            chat_id=message.chat.id,
-            message_id=message.message_id,
+            chat_id=callback.message.chat.id,
+            message_id=callback.message.message_id,
             reply_markup=markup,
         )
 
+    async def replace(body: str, attachments: list[InputRichMessageMedia]) -> None:
+        message = callback.message
+        with suppress(TelegramBadRequest):
+            await message.delete()
+        await bot.send_rich_message(
+            chat_id=message.chat.id,
+            message_thread_id=_thread_id(message),
+            rich_message=InputRichMessage(markdown=body, media=attachments or None),
+            reply_markup=markup,
+        )
+
+    message = callback.message
+    if message is None and not callback.inline_message_id:
+        return
+
+    # Фотография (диаграмма) текстом не правится вовсе — сразу заменяем
+    if message is not None and getattr(message, "photo", None):
+        await replace(text, media)
+        return
+
     try:
         await apply(text, media)
+        return
     except TelegramBadRequest as exc:
         if "message is not modified" in str(exc):
             return
-        if not media:
-            raise
+        log.warning("Карточка не поправилась (%s)", exc)
+
+    if media:  # ролик мог помешать — пробуем поправить без него
         _gif_ids.pop(gif, None)
-        log.warning("Ролик %s не приложился к карточке (%s)", gif, exc)
-        with suppress(TelegramBadRequest):
+        try:
             await apply(str(markdown), [])
+            return
+        except TelegramBadRequest:
+            pass
+
+    if message is not None:  # inline-сообщение заменить нечем
+        await replace(str(markdown), [])
 
 
 async def group_for_callback(session: AsyncSession, callback: CallbackQuery, user: User):
