@@ -141,7 +141,9 @@ def draft_card(
     )
 
 
-def summary_text(data: GroupSummary, *, with_header: bool = True) -> Rich:
+def summary_text(
+    data: GroupSummary, *, with_header: bool = True, with_debts: bool = True
+) -> Rich:
     """Сводка: остаток фонда и таблица балансов."""
     parts: list[Rich] = []
     if with_header:
@@ -175,7 +177,7 @@ def summary_text(data: GroupSummary, *, with_header: bool = True) -> Rich:
     parts.append(heading(3, "Балансы"))
     parts.append(table(["Участник", "Баланс", "Вклад", "Доля"], rows, align="lrrr"))
 
-    debtors = [item for item in data.members if item.balance < 0]
+    debtors = [item for item in data.members if item.balance < 0] if with_debts else []
     if debtors:
         parts.append(
             blocks(

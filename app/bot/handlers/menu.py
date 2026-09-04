@@ -46,7 +46,8 @@ async def render_home(
     text = texts.lines(
         texts.join("👋 ", texts.bold(user.short_name)),
         texts.join(""),
-        texts.summary_text(data),
+        # Кто сколько должен — в /balance: в меню это лишний блок
+        texts.summary_text(data, with_debts=False),
     )
     if len(groups) > 1:
         text = texts.blocks(text, texts.italic("Сменить бюджет: /groups"))

@@ -418,6 +418,41 @@ async def main():
         assert await service.get_operation(db, op_id) is None, "операция должна быть удалена"
     print("### админ чата удаляет чужую операцию ✓")
 
+    # ---- ролики после операций ----
+    session.reset()
+    await dp.feed_update(bot, upd(message=msg("/add 1500", ANYA, GROUP)))
+    kinds = [name for name, _ in session.calls]
+    assert "SendAnimation" in kinds, kinds
+    assert kinds.index("SendAnimation") < kinds.index("SendRichMessage"), \
+        "ролик должен идти перед карточкой, чтобы карточка осталась последней"
+    print("\n### после пополнения уходит ролик topup ✓")
+
+    session.reset()
+    await dp.feed_update(bot, upd(message=msg("/buy кофе 400", ANYA, GROUP)))
+    assert "SendAnimation" in [name for name, _ in session.calls]
+    print("### после покупки уходит ролик buy ✓")
+
+    # второй раз тот же ролик уходит по file_id, без повторной загрузки
+    session.reset()
+    await dp.feed_update(bot, upd(message=msg("/buy чай 200", ANYA, GROUP)))
+    animation = session.find("SendAnimation")[-1]["animation"]
+    assert animation == "anim-id", f"ожидался file_id, пришло: {animation!r}"
+    print("### повторная отправка идёт по file_id ✓")
+
+    # сбой ролика не мешает записать операцию
+    from app.bot.common import _gif_ids
+
+    _gif_ids.clear()
+    session.reset()
+    session.fail_on.add("SendAnimation")
+    logging.getLogger("app.bot.common").setLevel(logging.CRITICAL)
+    await dp.feed_update(bot, upd(message=msg("/buy хлеб 90", ANYA, GROUP)))
+    logging.getLogger("app.bot.common").setLevel(logging.NOTSET)
+    out = session.texts()
+    assert any("Хлеб" in text for text in out), out  # в суммах неразрывный пробел
+    print("### упавший ролик не мешает карточке ✓")
+
+
 
 
 

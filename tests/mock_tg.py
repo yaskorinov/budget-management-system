@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime as dt
 from aiogram.client.session.base import BaseSession
 from aiogram.types import (
+    Animation,
     Chat,
     ChatMemberMember,
     ChatMemberOwner,
@@ -57,6 +58,18 @@ class MockSession(BaseSession):
             if uid in self.chat_admins:
                 return ChatMemberOwner(user=user, is_anonymous=False)
             return ChatMemberMember(user=user)
+        if name == "SendAnimation":
+            self._msg_id += 1
+            return Message(
+                message_id=self._msg_id,
+                date=dt.datetime.now(),
+                chat=Chat(id=data.get("chat_id", 1), type="private"),
+                from_user=BOT_USER,
+                animation=Animation(
+                    file_id="anim-id", file_unique_id="anim", width=320,
+                    height=320, duration=2,
+                ),
+            )
         if name in {"SendMessage", "SendRichMessage", "SendPhoto", "EditMessageText",
                     "EditMessageMedia", "EditMessageCaption", "EditMessageReplyMarkup"}:
             if data.get("inline_message_id"):

@@ -32,6 +32,8 @@ COPY --from=builder /opt/venv /opt/venv
 WORKDIR /app
 COPY --chown=app:app run.py requirements.txt ./
 COPY --chown=app:app app ./app
+COPY --chown=app:app assets ./assets
+COPY --chown=app:app gifs ./gifs
 COPY --chown=app:app scripts ./scripts
 COPY --chown=app:app tests ./tests
 

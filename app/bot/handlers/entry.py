@@ -19,6 +19,7 @@ from app.bot.common import (
     drop_prompt,
     edit_card,
     resolve_group,
+    send_reaction_gif,
 )
 from app.bot.filters import PromptReply
 from app.bot.states import AddContribution, AddPurchase
@@ -93,8 +94,12 @@ async def record_contribution(
         session, group_id=group.id, author_id=user.id, amount=amount, source=source
     )
     data = await service.summary(session, group=group)
-    await answer_rich(message, 
-        texts.operation_card(operation, group=card_group(message, group), fund_left=data.fund_left),
+    await send_reaction_gif(message, "topup")
+    await answer_rich(
+        message,
+        texts.operation_card(
+            operation, group=card_group(message, group), fund_left=data.fund_left
+        ),
         reply_markup=keyboards.operation_kb(operation, compact=True),
     )
 
@@ -130,7 +135,9 @@ async def record_purchase(
     )
     members = await service.group_members(session, group.id)
     data = await service.summary(session, group=group)
-    await answer_rich(message, 
+    await send_reaction_gif(message, "buy")
+    await answer_rich(
+        message,
         texts.operation_card(
             operation,
             group=card_group(message, group),

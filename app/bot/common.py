@@ -1,12 +1,14 @@
 """Общие помощники хендлеров."""
 from __future__ import annotations
 
+import logging
 from contextlib import suppress
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import (
     CallbackQuery,
+    FSInputFile,
     InlineKeyboardMarkup,
     InputRichMessage,
     Message,
@@ -15,9 +17,11 @@ from aiogram.types import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import texts
-from app.config import settings
+from app.config import BASE_DIR, settings
 from app.core import service
 from app.db.models import Group, User
+
+log = logging.getLogger(__name__)
 
 GROUP_CHATS = {"group", "supergroup"}
 
@@ -90,6 +94,41 @@ def is_private(callback: CallbackQuery) -> bool:
 def _thread_id(message: Message) -> int | None:
     """Тема форума, если сообщение пришло из неё."""
     return message.message_thread_id if getattr(message, "is_topic_message", False) else None
+
+
+GIF_DIR = BASE_DIR / "gifs"
+_gif_ids: dict[str, str] = {}  # file_id уже загруженных роликов
+
+
+async def send_reaction_gif(message: Message, name: str) -> None:
+    """Ролик после записи операции: topup — пополнение, buy — покупка.
+
+    Первый раз файл загружается, дальше отправляется по file_id: гонять один
+    и тот же ролик в Telegram на каждую покупку незачем. Файла нет — молча
+    пропускаем, операция уже записана и без него.
+    """
+    cached = _gif_ids.get(name)
+    path = GIF_DIR / f"{name}.mp4"
+    if cached is None and not path.exists():
+        return
+
+    try:
+        sent = await message.bot.send_animation(
+            chat_id=message.chat.id,
+            message_thread_id=_thread_id(message),
+            animation=cached or FSInputFile(path),
+            disable_notification=True,  # уведомление придёт от самой карточки
+        )
+    except Exception as exc:
+        # Ролик — украшение: что бы с ним ни случилось, карточку операции
+        # это ломать не должно. Протухший file_id заодно выбрасываем.
+        _gif_ids.pop(name, None)
+        log.warning("Ролик %s не отправился (%s)", name, exc)
+        return
+
+    animation = getattr(sent, "animation", None)
+    if animation is not None:
+        _gif_ids[name] = animation.file_id
 
 
 async def answer_rich(

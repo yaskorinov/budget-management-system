@@ -268,14 +268,14 @@ def _contrast_ink(hex_color: str) -> str:
 FIG_WIDTH = 8.6
 DPI = 120
 HEADER_H = 1.15  # заголовок и подзаголовок
-DONUT_H = 5.4  # больше бокс — кольцо не мельчает от полей под подписи
+DONUT_H = 4.8
 BOTTOM_H = 0.32
 RING_WIDTH = 0.38  # толщина кольца в долях радиуса
-AXIS_LIMIT = 1.22  # поле снаружи кольца под подписи процентов
+AXIS_LIMIT = 1.04  # подписей снаружи нет, поэтому запас минимальный
 SEGMENT_GAP_DEG = 3.0  # зазор между сегментами
 
 CHIP_FONT = 13.5
-CHIP_WEIGHT = "semibold"
+CHIP_WEIGHT = "normal"
 CHIP_PAD = 0.62  # доля от кегля, как понимает boxstyle
 CHIP_GAP = 12.0
 CHIP_ROW_GAP = 12.0
@@ -472,27 +472,12 @@ def _draw_ring(ax, slices: list[Slice], total: int) -> None:
 def _draw_segment_marks(
     ax, item: Slice, start: float, end: float, band: float, total: int
 ) -> None:
-    """Иконка внутри сегмента и процент снаружи кольца."""
-    share = item.value / total
+    """Иконка внутри сегмента. Доли подписаны на плашках под кольцом."""
+    if not item.icon or item.value / total < 0.07:
+        return  # в узкой доле иконка не читается
     middle = math.radians((start + end) / 2)
-    x, y = math.cos(middle), math.sin(middle)
-
-    if item.icon and share >= 0.07:  # в узкой доле иконка не читается
-        _draw_icon(ax, item.icon, band * x, band * y, RING_WIDTH * 0.52)
-
-    if share < 0.03:  # подпись такой доли всё равно сольётся с соседней
-        return
-
-    # Якорь по направлению: подпись растёт от кольца наружу, а не поперёк него.
-    # С якорем по центру половина текста заходила на сегмент справа и слева,
-    # а сверху и снизу, наоборот, отходила далеко.
-    edge = 0.12
-    ax.text(
-        1.03 * x, 1.03 * y, f"{share * 100:.0f}%",
-        ha="left" if x > edge else ("right" if x < -edge else "center"),
-        va="bottom" if y > edge else ("top" if y < -edge else "center"),
-        color=INK_SECONDARY, fontsize=13.5, fontweight="bold",
-    )
+    _draw_icon(ax, item.icon, band * math.cos(middle), band * math.sin(middle),
+               RING_WIDTH * 0.52)
 
 
 def render_donut(
