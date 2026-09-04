@@ -485,7 +485,7 @@ def _draw_segment_marks(
         1.03 * x, 1.03 * y, f"{share * 100:.0f}%",
         ha="left" if x > edge else ("right" if x < -edge else "center"),
         va="bottom" if y > edge else ("top" if y < -edge else "center"),
-        color=INK_SECONDARY, fontsize=12.5, fontweight="bold",
+        color=INK_SECONDARY, fontsize=13.5, fontweight="bold",
     )
 
 
@@ -530,10 +530,10 @@ def render_donut(
 
     fig = plt.figure(figsize=(FIG_WIDTH, height_in), dpi=DPI, facecolor=SURFACE)
 
-    fig.text(0.5, 1 - 0.32 / height_in, title, color=INK_PRIMARY, fontsize=23,
+    fig.text(0.5, 1 - 0.32 / height_in, title, color=INK_PRIMARY, fontsize=24,
              fontweight="bold", ha="center", va="top")
-    fig.text(0.5, 1 - 0.72 / height_in, subtitle, color=INK_SECONDARY, fontsize=13,
-             ha="center", va="top")
+    fig.text(0.5, 1 - 0.72 / height_in, subtitle, color=INK_SECONDARY, fontsize=13.5,
+             fontweight="semibold", ha="center", va="top")
 
     # Кольцо одного размера при любом числе плашек: бокс задан в дюймах
     donut_bottom = (BOTTOM_H + len(rows) * row_h_in) / height_in
@@ -549,10 +549,13 @@ def render_donut(
 
     _draw_ring(ax, slices, total)
 
-    ax.text(0, 0.055, format_money(total, symbol), ha="center", va="center",
-            color=INK_PRIMARY, fontsize=19, fontweight="bold")
+    # Крупная сумма упирается в кольцо на длинных числах — ужимаем по длине
+    money_text = format_money(total, symbol)
+    money_size = min(26.0, 26.0 * 12 / max(len(money_text), 12))
+    ax.text(0, 0.055, money_text, ha="center", va="center",
+            color=INK_PRIMARY, fontsize=money_size, fontweight="bold")
     ax.text(0, -0.10, total_caption, ha="center", va="center",
-            color=INK_MUTED, fontsize=12.5)
+            color=INK_MUTED, fontsize=13, fontweight="semibold")
 
     # Плашки: фон — цвет категории, текст — контрастный к нему
     y_px = (BOTTOM_H + len(rows) * row_h_in) * DPI - line_px / 2
@@ -566,6 +569,7 @@ def render_donut(
                 labels[index],
                 color=_contrast_ink(slices[index].color),
                 fontsize=CHIP_FONT,
+                fontweight="semibold",
                 ha="left",
                 va="center",
                 bbox={
