@@ -17,6 +17,7 @@ from app.bot.common import (
     answer_rich,
     edit_card,
     group_for_callback,
+    is_chat_admin,
     is_private,
     resolve_group,
     show_operation_card,
@@ -110,24 +111,41 @@ async def ops_page(
 
 
 async def _load(
-    callback: CallbackQuery, session: AsyncSession, user: User, op_id: int, *, write: bool
+    callback: CallbackQuery,
+    session: AsyncSession,
+    user: User,
+    op_id: int,
+    *,
+    write: bool,
+    bot: Bot | None = None,
 ):
     """Достаёт операцию и проверяет права. None — доступ закрыт, ответ уже отправлен."""
     operation = await service.get_operation(session, op_id)
     if operation is None:
         await callback.answer("Операция не найдена или удалена", show_alert=True)
         return None
-    if not await service.is_member(
-        session, group_id=operation.group_id, user_id=user.id
-    ):
+
+    if not await service.is_member(session, group_id=operation.group_id, user_id=user.id):
         await callback.answer("Это операция чужой группы", show_alert=True)
         return None
+
     if write and not await service.can_manage(session, operation, user):
-        await callback.answer(
-            "Править операцию может только тот, кто её внёс (или админ группы)",
-            show_alert=True,
-        )
-        return None
+        # Админом чата могли назначить уже после входа в бюджет — спросим Telegram
+        group = await session.get(Group, operation.group_id)
+        allowed = False
+        if bot is not None and group is not None and group.tg_chat_id:
+            allowed = await is_chat_admin(bot, group.tg_chat_id, user.tg_user_id)
+            if allowed:
+                await service.grant_admins(
+                    session, group_id=group.id, tg_user_ids=[user.tg_user_id]
+                )
+        if not allowed:
+            await callback.answer(
+                "Править операцию может только тот, кто её внёс, или админ группы",
+                show_alert=True,
+            )
+            return None
+
     return operation
 
 
@@ -146,7 +164,7 @@ async def op_card(
 async def op_categories(
     callback: CallbackQuery, callback_data: OpCB, session: AsyncSession, user: User, bot: Bot
 ) -> None:
-    operation = await _load(callback, session, user, callback_data.op_id, write=True)
+    operation = await _load(callback, session, user, callback_data.op_id, write=True, bot=bot)
     if operation is None:
         return
     await edit_card(
@@ -165,7 +183,7 @@ async def op_categories(
 async def op_set_category(
     callback: CallbackQuery, callback_data: OpCB, session: AsyncSession, user: User, bot: Bot
 ) -> None:
-    operation = await _load(callback, session, user, callback_data.op_id, write=True)
+    operation = await _load(callback, session, user, callback_data.op_id, write=True, bot=bot)
     if operation is None:
         return
     await service.edit_operation(session, operation, category=callback_data.value)
@@ -179,7 +197,7 @@ async def op_set_category(
 async def op_participants(
     callback: CallbackQuery, callback_data: OpCB, session: AsyncSession, user: User, bot: Bot
 ) -> None:
-    operation = await _load(callback, session, user, callback_data.op_id, write=True)
+    operation = await _load(callback, session, user, callback_data.op_id, write=True, bot=bot)
     if operation is None:
         return
     members = await service.group_members(session, operation.group_id)
@@ -202,7 +220,7 @@ async def op_participants(
 async def op_toggle_participant(
     callback: CallbackQuery, callback_data: OpCB, session: AsyncSession, user: User, bot: Bot
 ) -> None:
-    operation = await _load(callback, session, user, callback_data.op_id, write=True)
+    operation = await _load(callback, session, user, callback_data.op_id, write=True, bot=bot)
     if operation is None:
         return
 
@@ -242,7 +260,7 @@ async def op_amount_prompt(
     state: FSMContext,
     bot: Bot,
 ) -> None:
-    operation = await _load(callback, session, user, callback_data.op_id, write=True)
+    operation = await _load(callback, session, user, callback_data.op_id, write=True, bot=bot)
     if operation is None:
         return
 
@@ -341,7 +359,7 @@ async def op_amount_set(
 async def op_delete_confirm(
     callback: CallbackQuery, callback_data: OpCB, session: AsyncSession, user: User, bot: Bot
 ) -> None:
-    operation = await _load(callback, session, user, callback_data.op_id, write=True)
+    operation = await _load(callback, session, user, callback_data.op_id, write=True, bot=bot)
     if operation is None:
         return
     await edit_card(
@@ -363,7 +381,7 @@ async def op_delete_confirm(
 async def op_delete(
     callback: CallbackQuery, callback_data: OpCB, session: AsyncSession, user: User, bot: Bot
 ) -> None:
-    operation = await _load(callback, session, user, callback_data.op_id, write=True)
+    operation = await _load(callback, session, user, callback_data.op_id, write=True, bot=bot)
     if operation is None:
         return
 

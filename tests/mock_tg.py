@@ -2,7 +2,14 @@
 from __future__ import annotations
 import datetime as dt
 from aiogram.client.session.base import BaseSession
-from aiogram.types import Chat, Message, PhotoSize, User as TgUser
+from aiogram.types import (
+    Chat,
+    ChatMemberMember,
+    ChatMemberOwner,
+    Message,
+    PhotoSize,
+    User as TgUser,
+)
 
 BOT_USER = TgUser(id=999, is_bot=True, first_name="Budget", username="budget_bot")
 
@@ -12,6 +19,7 @@ class MockSession(BaseSession):
         super().__init__()
         self.calls: list[tuple[str, dict]] = []
         self.fail_on: set[str] = set()  # разовая имитация отказа Telegram
+        self.chat_admins: set[int] = set()  # кого Telegram считает админом чата
         self._msg_id = 1000
 
     async def close(self):
@@ -35,6 +43,20 @@ class MockSession(BaseSession):
 
         if name == "GetMe":
             return BOT_USER
+        if name == "GetChatAdministrators":
+            return [
+                ChatMemberOwner(
+                    user=TgUser(id=uid, is_bot=False, first_name="admin"),
+                    is_anonymous=False,
+                )
+                for uid in self.chat_admins
+            ]
+        if name == "GetChatMember":
+            uid = data.get("user_id")
+            user = TgUser(id=uid, is_bot=False, first_name="user")
+            if uid in self.chat_admins:
+                return ChatMemberOwner(user=user, is_anonymous=False)
+            return ChatMemberMember(user=user)
         if name in {"SendMessage", "SendRichMessage", "SendPhoto", "EditMessageText",
                     "EditMessageMedia", "EditMessageCaption", "EditMessageReplyMarkup"}:
             if data.get("inline_message_id"):

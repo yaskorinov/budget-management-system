@@ -28,6 +28,28 @@ def web_app_url(user_token: str | None = None) -> str | None:
     return f"{settings.public_base}/?src=tg"
 
 
+async def sync_chat_admins(bot: Bot, session: AsyncSession, group, chat_id: int) -> None:
+    """Переносит админов чата в права бюджета."""
+    try:
+        admins = await bot.get_chat_administrators(chat_id)
+    except TelegramBadRequest:
+        return
+    await service.grant_admins(
+        session,
+        group_id=group.id,
+        tg_user_ids=[a.user.id for a in admins if not a.user.is_bot],
+    )
+
+
+async def is_chat_admin(bot: Bot, chat_id: int, tg_user_id: int) -> bool:
+    """Проверка по чату: админа могли назначить уже после входа в бюджет."""
+    try:
+        member = await bot.get_chat_member(chat_id, tg_user_id)
+    except TelegramBadRequest:
+        return False
+    return member.status in ("administrator", "creator")
+
+
 async def resolve_group(
     session: AsyncSession, message: Message, user: User, *, join: bool = False
 ) -> Group | None:
@@ -41,6 +63,8 @@ async def resolve_group(
             await service.ensure_member(session, group_id=group.id, user_id=user.id)
             user.active_group_id = group.id
             await session.flush()
+            if join:
+                await sync_chat_admins(message.bot, session, group, message.chat.id)
         return group
     return await service.resolve_active_group(session, user)
 

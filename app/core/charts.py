@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
+from app.config import BASE_DIR
 from app.core import categories as cat
 from app.core.money import format_money
 
@@ -22,6 +23,9 @@ log = logging.getLogger(__name__)
 SURFACE = "#fcfcfb"
 INK_PRIMARY = "#0b0b0b"
 ICON_INK = "#1a1a19"  # иконки внутри сегментов — тёмные, палитра под них пастельная
+
+FONT_DIR = BASE_DIR / "assets" / "fonts"
+ICON_DIR = BASE_DIR / "assets" / "icons"
 INK_SECONDARY = "#52514e"
 INK_MUTED = "#8a8985"
 
@@ -131,8 +135,25 @@ def _icon_shapes(name: str):
     return []
 
 
+@lru_cache(maxsize=32)
+def _icon_file(name: str):
+    """Своя иконка из assets/icons/<категория>.svg, если её туда положили."""
+    from app.core.svg_icons import load_icon
+
+    return load_icon(str(ICON_DIR / f"{name}.svg"))
+
+
 def _draw_icon(ax, name: str, cx: float, cy: float, size: float) -> bool:
     """Рисует пиктограмму в точке (cx, cy). False — если такой иконки нет."""
+    custom = _icon_file(name)
+    if custom is not None:
+        from matplotlib.patches import PathPatch
+        from matplotlib.transforms import Affine2D
+
+        placed = Affine2D().scale(size).translate(cx, cy).transform_path(custom)
+        ax.add_patch(PathPatch(placed, facecolor=ICON_INK, edgecolor="none", zorder=4))
+        return True
+
     shapes = _icon_shapes(name)
     if not shapes:
         return False
@@ -198,12 +219,28 @@ def _draw_icon(ax, name: str, cx: float, cy: float, size: float) -> bool:
 
 
 @lru_cache(maxsize=1)
+def chart_font() -> str:
+    """Подключает Inter из assets/fonts. Нет файлов — остаётся шрифт по умолчанию."""
+    try:
+        from matplotlib import font_manager
+
+        added = False
+        for path in sorted(FONT_DIR.glob("*.ttf")):
+            font_manager.fontManager.addfont(str(path))
+            added = True
+        return "Inter" if added else "DejaVu Sans"
+    except Exception as exc:  # pragma: no cover — окружение без matplotlib
+        log.warning("Шрифт Inter не подключён (%s)", exc)
+        return "DejaVu Sans"
+
+
+@lru_cache(maxsize=1)
 def currency_symbol() -> str:
     """₽ есть не в каждом шрифте — если глифа нет, подписываем «руб.»."""
     try:
         from matplotlib.font_manager import FontProperties, findfont, get_font
 
-        font = get_font(findfont(FontProperties(family="DejaVu Sans")))
+        font = get_font(findfont(FontProperties(family=chart_font())))
         return "₽" if font.get_char_index(0x20BD) else "руб."
     except Exception:  # matplotlib не установлен или шрифт не найден
         return "₽"
@@ -474,6 +511,8 @@ def render_donut(
         log.warning("matplotlib недоступен (%s), диаграмма не построена", exc)
         return None
 
+    matplotlib.rcParams["font.family"] = chart_font()
+
     symbol = currency_symbol()
     total = sum(s.value for s in slices)
 
@@ -510,9 +549,9 @@ def render_donut(
 
     _draw_ring(ax, slices, total)
 
-    ax.text(0, 0.09, format_money(total, symbol), ha="center", va="center",
+    ax.text(0, 0.055, format_money(total, symbol), ha="center", va="center",
             color=INK_PRIMARY, fontsize=19, fontweight="bold")
-    ax.text(0, -0.14, total_caption, ha="center", va="center",
+    ax.text(0, -0.10, total_caption, ha="center", va="center",
             color=INK_MUTED, fontsize=12.5)
 
     # Плашки: фон — цвет категории, текст — контрастный к нему

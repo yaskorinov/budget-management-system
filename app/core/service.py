@@ -112,6 +112,30 @@ async def ensure_member(
     return membership
 
 
+async def grant_admins(session: AsyncSession, *, group_id: int, tg_user_ids: list[int]) -> int:
+    """Отмечает админами тех, кто админ в самом чате.
+
+    Права только выдаём: снимать их по составу чата нельзя, иначе слетит
+    админ, назначенный в самом боте.
+    """
+    if not tg_user_ids:
+        return 0
+
+    rows = await session.execute(
+        select(Membership)
+        .join(User, User.id == Membership.user_id)
+        .where(Membership.group_id == group_id, User.tg_user_id.in_(tg_user_ids))
+    )
+    granted = 0
+    for membership in rows.scalars():
+        if not membership.is_admin:
+            membership.is_admin = True
+            granted += 1
+    if granted:
+        await session.flush()
+    return granted
+
+
 async def leave_group(session: AsyncSession, *, group_id: int, user_id: int) -> None:
     membership = await session.scalar(
         select(Membership).where(

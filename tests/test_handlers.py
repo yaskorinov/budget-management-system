@@ -387,6 +387,38 @@ async def main():
     assert any("Дача" in text and "создан" in text for text in out), out
     print("### /newgroup без аргументов спрашивает название ✓")
 
+    # ---- админ чата правит и удаляет чужие операции ----
+    from app.db.base import session_scope
+    from app.core import service
+
+    # Аня записывает покупку в группе, Боря — админ чата
+    out = await send("/buy сковорода 2400", ANYA, GROUP)
+    show("покупка Ани", out)
+    async with session_scope() as db:
+        group = await service.get_or_create_group_for_chat(
+            db, tg_chat_id=GROUP.id, title=GROUP.title)
+        ops = await service.list_operations(db, group_id=group.id, limit=1)
+        op_id = ops[0].id
+
+    # без прав админа чужая операция не правится
+    session.chat_admins = set()
+    out = await press(f"o:del:{op_id}:", BORYA, GROUP)
+    assert any("только тот, кто её внёс" in t for t in out), out
+    print("\n### чужую операцию посторонний не удаляет ✓")
+
+    # админ чата — может
+    session.chat_admins = {BORYA.id}
+    out = await press(f"o:del:{op_id}:", BORYA, GROUP)
+    assert any("Удалить" in t for t in out), out
+    out = await press(f"o:delyes:{op_id}:", BORYA, GROUP)
+    show("админ удаляет чужую операцию", out)
+    assert any("удалена" in t for t in out), out
+
+    async with session_scope() as db:
+        assert await service.get_operation(db, op_id) is None, "операция должна быть удалена"
+    print("### админ чата удаляет чужую операцию ✓")
+
+
 
 
 

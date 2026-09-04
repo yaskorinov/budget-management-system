@@ -76,6 +76,16 @@ async def main():
         r_prev = await reports.build(s, group=g, mode="categories", period="prev_month")
         print("прошлый месяц:", r_prev.period_title, "пусто:", r_prev.is_empty)
 
+    # своя SVG-иконка разбирается в путь и вписывается в единичный квадрат
+    from app.core.svg_icons import load_icon
+
+    icon = load_icon(str(ROOT / "assets" / "icons" / "food.svg"))
+    assert icon is not None and len(icon.vertices) > 10, "иконка не разобралась"
+    box = icon.get_extents()
+    assert max(box.width, box.height) == 1.0, f"иконка не нормализована: {box}"
+    assert abs(box.x0 + box.x1) < 1e-6 and abs(box.y0 + box.y1) < 1e-6, "иконка не по центру"
+    print("SVG-иконка:", len(icon.vertices), "вершин, вписана в квадрат")
+
     print("\nOK: ядро работает")
 
 asyncio.run(main())
