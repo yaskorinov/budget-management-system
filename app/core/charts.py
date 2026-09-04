@@ -275,6 +275,7 @@ AXIS_LIMIT = 1.22  # поле снаружи кольца под подписи 
 SEGMENT_GAP_DEG = 3.0  # зазор между сегментами
 
 CHIP_FONT = 13.5
+CHIP_WEIGHT = "semibold"
 CHIP_PAD = 0.62  # доля от кегля, как понимает boxstyle
 CHIP_GAP = 12.0
 CHIP_ROW_GAP = 12.0
@@ -291,7 +292,12 @@ def _measure_chips(labels: list[str], plt) -> list[float]:
     """Ширины плашек. Их знает только отрисовщик, поэтому меряем на черновике."""
     pad_px, _ = _chip_metrics()
     probe = plt.figure(figsize=(FIG_WIDTH, 1), dpi=DPI)
-    texts = [probe.text(0, 0, label, fontsize=CHIP_FONT) for label in labels]
+    # Начертание обязано совпадать с настоящей плашкой: полужирный шире
+    # обычного, и по замеру обычным плашки налезали друг на друга
+    texts = [
+        probe.text(0, 0, label, fontsize=CHIP_FONT, fontweight=CHIP_WEIGHT)
+        for label in labels
+    ]
     probe.canvas.draw()
     renderer = probe.canvas.get_renderer()
     widths = [t.get_window_extent(renderer).width + 2 * pad_px for t in texts]
@@ -569,7 +575,7 @@ def render_donut(
                 labels[index],
                 color=_contrast_ink(slices[index].color),
                 fontsize=CHIP_FONT,
-                fontweight="semibold",
+                fontweight=CHIP_WEIGHT,
                 ha="left",
                 va="center",
                 bbox={
