@@ -511,6 +511,32 @@ async def main():
     print("### правка суммы: карточка rich-разметкой и с роликом ✓")
 
     # карточка с роликом правится на месте, а не пересоздаётся
+
+    # ролик возвращается при выходе из правки
+    from app.bot.common import _card_gifs
+
+    session.reset()
+    sent = await dp.feed_update(bot, upd(message=msg("/buy соль 60", ANYA, GROUP)))
+    card = session.find("SendRichMessage")[-1]
+    card_id = [m for n, m in session.calls if n == "SendRichMessage"]
+    assert card["rich_message"]["media"][0]["id"] == "buy"
+    # id отправленного сообщения знает мок: он вернул его хендлеру
+    key = next(k for k in _card_gifs if _card_gifs[k] == "buy")
+
+    # заходим в выбор категории и возвращаемся назад
+    message_id = int(key[1])
+    for data in (f"o:cat:{fresh}:", f"o:card:{fresh}:"):
+        session.reset()
+        cb = CallbackQuery(
+            id="b1", from_user=ANYA, chat_instance="x", data=data,
+            message=Message(message_id=message_id, date=dt.datetime.now(), chat=GROUP,
+                            from_user=TgUser(id=999, is_bot=True, first_name="Bot")),
+        ).as_(bot)
+        await dp.feed_update(bot, upd(callback_query=cb))
+        media = session.find("EditMessageText")[-1]["rich_message"].get("media")
+        assert media and media[0]["id"] == "buy", f"{data}: ролик потерялся ({media})"
+    print("\n### при выходе из правки ролик возвращается ✓")
+
     from aiogram.types import Animation
 
     def card_with_gif(chat, message_id=8888):

@@ -100,6 +100,20 @@ def _thread_id(message: Message) -> int | None:
 
 GIF_DIR = BASE_DIR / "gifs"
 _gif_ids: dict[str, str] = {}  # file_id уже загруженных роликов
+# Какой ролик показан в каком сообщении. Telegram у rich-сообщения поле
+# animation не заполняет, поэтому при правке взять ролик неоткуда — помним сами.
+_card_gifs: dict[tuple[str, str], str] = {}
+_CARD_GIFS_LIMIT = 500
+
+
+def _card_key(chat_id: object, message_id: object) -> tuple[str, str]:
+    return str(chat_id), str(message_id)
+
+
+def remember_card_gif(key: tuple[str, str], name: str) -> None:
+    if len(_card_gifs) >= _CARD_GIFS_LIMIT:
+        _card_gifs.pop(next(iter(_card_gifs)), None)
+    _card_gifs[key] = name
 
 
 def gif_block(name: str) -> tuple[str, list[InputRichMessageMedia]]:
@@ -184,6 +198,7 @@ async def answer_rich(
         return await send(str(markdown), [])
 
     remember_gif(gif, sent)
+    remember_card_gif(_card_key(sent.chat.id, sent.message_id), gif)
     return sent
 
 
@@ -201,9 +216,18 @@ async def edit_card(
     переписке. Отправка нового оставлена запасным путём — на случай, когда
     сообщение правкой не берётся (диаграмма отправлена как фотография).
     """
-    block, media = (
-        gif_block(gif) if gif else kept_gif_block(callback.message)
+    message = callback.message
+    key = (
+        _card_key("inline", callback.inline_message_id)
+        if callback.inline_message_id
+        else _card_key(message.chat.id, message.message_id)
+        if message is not None
+        else None
     )
+
+    # Без явного ролика возвращаем тот, что уже показан в этом сообщении
+    name = gif or (_card_gifs.get(key) if key else None)
+    block, media = gif_block(name) if name else kept_gif_block(message)
     text = block + chr(10) * 2 + str(markdown) if block else str(markdown)
 
     async def apply(body: str, attachments: list[InputRichMessageMedia]) -> None:
@@ -233,7 +257,6 @@ async def edit_card(
             reply_markup=markup,
         )
 
-    message = callback.message
     if message is None and not callback.inline_message_id:
         return
 
@@ -244,6 +267,8 @@ async def edit_card(
 
     try:
         await apply(text, media)
+        if key and name:
+            remember_card_gif(key, name)
         return
     except TelegramBadRequest as exc:
         if "message is not modified" in str(exc):
@@ -251,7 +276,9 @@ async def edit_card(
         log.warning("Карточка не поправилась (%s)", exc)
 
     if media:  # ролик мог помешать — пробуем поправить без него
-        _gif_ids.pop(gif, None)
+        _gif_ids.pop(name, None)
+        if key:
+            _card_gifs.pop(key, None)
         try:
             await apply(str(markdown), [])
             return
