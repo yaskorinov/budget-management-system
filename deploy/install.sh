@@ -9,7 +9,7 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 echo "==> Пакеты"
 apt-get update
 apt-get install -y python3 python3-venv python3-pip nginx certbot python3-certbot-nginx \
-    fonts-dejavu-core fonts-noto-color-emoji
+    fonts-dejavu-core
 
 echo "==> Пользователь и каталог"
 id -u "$APP_USER" >/dev/null 2>&1 || useradd --system --create-home --shell /usr/sbin/nologin "$APP_USER"

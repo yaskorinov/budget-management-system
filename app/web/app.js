@@ -471,7 +471,8 @@ function drawDonut(stats) {
     if (share >= 0.05) {
       const middle = angle + sweep / 2;
       const radius = (outer + inner) / 2;
-      context.fillStyle = '#ffffff';
+      // Палитра пастельная — процент пишем тёмным, белый на ней не читается
+      context.fillStyle = '#1a1a19';
       context.font = 'bold 26px -apple-system, "Segoe UI", Roboto, sans-serif';
       context.textAlign = 'center';
       context.textBaseline = 'middle';
