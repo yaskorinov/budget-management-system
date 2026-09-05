@@ -1,0 +1,22 @@
+# Прокси на хосте опубликован на шлюзе docker0 (172.17.0.1) — так делает,
+# например, vps-psiphon.
+#
+#   docker compose -f docker-compose.yml -f deploy/docker-compose.proxy.yml up -d
+#
+# Зачем: compose поднимает боту собственную сеть, а Docker изолирует мосты друг
+# от друга. Пакет к 172.17.0.1 из чужой сети молча отбрасывается — запрос виснет
+# и падает по таймауту, хотя с самого хоста curl -x работает. Оверлей выдаёт боту
+# вторую сеть — стандартный мост, где этот адрес доступен.
+#
+# После этого в .env: PROXY_URL=socks5://172.17.0.1:1080
+
+services:
+  app:
+    networks:
+      - default
+      - hostbridge
+
+networks:
+  hostbridge:
+    name: bridge
+    external: true
