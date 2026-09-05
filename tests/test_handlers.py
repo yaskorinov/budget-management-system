@@ -648,8 +648,9 @@ async def main():
     async def fake_tip(session_, group_):
         return "Продукты съедают половину бюджета — попробуйте закупаться раз в неделю."
 
-    async def fake_note():
-        return "Фонд немного просел — пополните, когда будет удобно."
+    async def fake_note(*, split: bool = False):
+        return ("Долги сами себя не вернут — как будет удобно." if split
+                else "Фонд немного просел — пополните, когда будет удобно.")
 
     real_tip, real_note = insights.spending_tip, insights.debt_note
     scheduler.insights.spending_tip = fake_tip
