@@ -86,6 +86,20 @@ async def main():
     assert abs(box.x0 + box.x1) < 1e-6 and abs(box.y0 + box.y1) < 1e-6, "иконка не по центру"
     print("SVG-иконка:", len(icon.vertices), "вершин, вписана в квадрат")
 
+    # Заголовки запроса обязаны быть в ascii: HTTP кириллицу не принимает,
+    # а падение уходило в тихий фолбэк на словарь
+    from app.config import settings as app_settings
+    from app.core.classifier import _headers
+
+    app_settings.llm_base_url = "https://openrouter.ai/api/v1"
+    app_settings.llm_api_key = "test"
+    for header, value in _headers().items():
+        value.encode("ascii")  # UnicodeEncodeError, если снова кириллица
+        header.encode("ascii")
+    app_settings.llm_api_key = ""
+    print("заголовки запроса: только ascii")
+
+
     print("\nOK: ядро работает")
 
 asyncio.run(main())

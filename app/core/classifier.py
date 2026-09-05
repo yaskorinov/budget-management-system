@@ -100,12 +100,17 @@ async def _call_anthropic(text: str) -> dict:
         await client.close()
 
 
+# Заголовки HTTP кириллицу не принимают: значение уходит в ascii и падает.
+# Отсюда — только латиница.
+APP_TITLE = "Budget Bot"
+
+
 def _headers() -> dict[str, str]:
     headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
     if "openrouter" in settings.llm_base_url:
         # OpenRouter просит представиться: по этим полям он показывает
         # приложение в статистике ключа
-        headers["X-Title"] = "Общий бюджет"
+        headers["X-Title"] = APP_TITLE
         headers["HTTP-Referer"] = settings.public_base or "https://t.me"
     return headers
 
