@@ -23,9 +23,6 @@
 
   --ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
         "Helvetica Neue", "Segoe UI", Roboto, system-ui, sans-serif;
-  --emoji: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji",
-           "Segoe UI Symbol", sans-serif;
-
   --bg: #141414;
   --bg-deep: #0a0a0a;
   --card: #1a1a1a;
@@ -62,6 +59,17 @@
     0 1px 5px rgba(0, 0, 0, .2),
     0 6px 16px rgba(0, 0, 0, .16);
 
+  /* Грань подвижной капсулы: тот же приём, что и у панели, но плотнее. */
+  --capsule: rgba(0, 0, 0, .3);
+  --capsule-edge:
+    inset 0 0 0 1px rgba(255, 255, 255, .03),
+    inset 2px 1px 0 -1px rgba(255, 255, 255, .27),
+    inset -1.5px -1px 0 -1px rgba(255, 255, 255, .24),
+    inset -2px -6px 1px -5px rgba(255, 255, 255, .18),
+    inset -1px 2px 3px -1px rgba(0, 0, 0, .4),
+    inset 0 -4px 1px -2px rgba(0, 0, 0, .2),
+    0 3px 6px rgba(0, 0, 0, .16);
+
   --wide: 1440px;
   --pad: 16px;
   --tabbar: 62px;
@@ -91,8 +99,6 @@ button { cursor: pointer; }
 
 .sprite { display: none; }
 
-.emo { font-family: var(--emoji); font-style: normal; line-height: 1; }
-.glyph { font-size: 1.05em; line-height: 1; }
 
 .caret {
   width: 7px; height: 7px; flex: none;
@@ -103,12 +109,16 @@ button { cursor: pointer; }
 }
 
 .ic {
-  width: 25px; height: 25px; flex: none;
+  width: 22px; height: 22px; flex: none;
   fill: none; stroke: currentColor; stroke-width: 1.7;
   stroke-linecap: round; stroke-linejoin: round;
 }
 .ic .dots { stroke-width: 2.6; }
 .ic-fill { fill: currentColor; stroke: none; }
+.ic-14 { width: 14px; height: 14px; stroke-width: 2.2; }
+.ic-18 { width: 18px; height: 18px; }
+.ic-20 { width: 20px; height: 20px; }
+.ic-22 { width: 22px; height: 22px; stroke-width: 2; }
 
 .eyebrow {
   display: block;
@@ -190,7 +200,6 @@ button { cursor: pointer; }
   display: grid; place-items: center;
   border-radius: 50%; border: none;
   background: var(--card); color: var(--ink-2);
-  font-size: 16px;
 }
 .appbar .icon-btn { margin-left: auto; }
 .icon-btn:active { transform: scale(.94); }
@@ -300,8 +309,9 @@ button { cursor: pointer; }
 }
 .op-icon {
   width: 44px; height: 44px; border-radius: var(--r-sm); flex: none;
-  display: grid; place-items: center; font-size: 21px;
+  display: grid; place-items: center;
 }
+.op-icon .ic { width: 22px; height: 22px; }
 .op-main { flex: 1; min-width: 0; }
 .op-title {
   font-size: 14.5px; font-weight: 600;
@@ -326,8 +336,10 @@ button { cursor: pointer; }
 .mini-btn {
   width: 32px; height: 32px; display: grid; place-items: center;
   border: none; border-radius: 50%;
-  background: var(--sunk); font-size: 13px;
+  background: var(--sunk); color: var(--ink-2);
 }
+.mini-btn .ic { width: 16px; height: 16px; }
+.mini-btn.danger { color: var(--bad); }
 .mini-btn.danger { background: rgba(255, 63, 70, .16); }
 .mini-btn:active { transform: scale(.92); }
 
@@ -411,52 +423,70 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
 
 /* ------------------------------------------------------- низ экрана */
 
-.tabbar {
+/* Панель и круглая кнопка стоят рядом одним блоком. По панели ездит вторая
+   стекляшка — она и отмечает выбранную вкладку: сдвигается на ширину ячейки
+   и на полпути слегка растягивается, иначе переход читается как рывок. */
+.dock {
   position: fixed; left: 50%; z-index: 9;
   bottom: calc(var(--tabbar-gap) + var(--safe-bottom));
   transform: translateX(-50%);
-  width: calc(100% - var(--pad) * 2); max-width: 420px;
+  display: flex; align-items: center; gap: 12px;
+  max-width: calc(100% - var(--pad) * 2);
+}
+
+.tabbar {
+  position: relative;
+  display: grid; grid-template-columns: repeat(3, 78px);
   height: var(--tabbar); padding: 4px;
-  display: flex; align-items: center; gap: 4px;
-  border-radius: 999px;
+  border: none; border-radius: 999px;
   background: var(--glass);
   box-shadow: var(--glass-edge);
   backdrop-filter: blur(8px) saturate(140%);
   -webkit-backdrop-filter: blur(8px) saturate(140%);
 }
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .tabbar { background: var(--glass-solid); }
+
+.tabbar::after {
+  content: ""; position: absolute; left: 4px; top: 4px;
+  width: calc((100% - 8px) / 3); height: calc(var(--tabbar) - 8px);
+  border-radius: 999px;
+  background: var(--capsule);
+  box-shadow: var(--capsule-edge);
+  transition: translate .25s cubic-bezier(1, 0, .4, 1);
 }
+.tabbar[data-active="0"]::after { translate: 0 0; }
+.tabbar[data-active="1"]::after { translate: 100% 0; }
+.tabbar[data-active="2"]::after { translate: 200% 0; }
+.tabbar[data-dir="right"]::after { transform-origin: left; }
+.tabbar[data-dir="left"]::after { transform-origin: right; }
+.tabbar.bump::after { animation: capsule .44s ease; }
+@keyframes capsule { 0%, 100% { scale: 1 1; } 50% { scale: 1.07 1.1; } }
 
 .tabbtn {
-  position: relative; flex: 1; height: 100%;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   border: none; background: none; color: var(--ink-3);
-  border-radius: 999px;
-  font-size: 10px; font-weight: 500; letter-spacing: -.01em;
+  border-radius: 999px; padding: 0;
+  font-size: 10px; font-weight: 700; line-height: 1.2; letter-spacing: -.4px;
 }
 .tabbtn .ic-fill { display: none; }
 .tabbtn.active { color: var(--primary); }
 .tabbtn.active .ic-line { display: none; }
 .tabbtn.active .ic-fill { display: block; }
-.tabbtn.active::before {
-  content: ""; position: absolute; top: 4px;
-  width: 52px; height: 30px; border-radius: 999px;
-  background: var(--primary); opacity: .22; filter: blur(9px);
-}
-.tabbtn:active { transform: scale(.94); }
 
-.fab {
-  position: fixed; z-index: 10;
-  right: max(var(--pad), calc(50vw - var(--wide) / 2 + var(--pad)));
-  bottom: calc(var(--tabbar) + var(--tabbar-gap) * 2 + var(--safe-bottom));
-  width: 54px; height: 54px; border-radius: 50%; border: none;
+.dock-btn {
+  width: 58px; height: var(--tabbar); flex: none;
   display: grid; place-items: center;
-  background: var(--primary); color: #fff;
-  font-size: 30px; font-weight: 300; line-height: 1; padding-bottom: 3px;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, .45);
+  border: none; border-radius: 999px;
+  background: var(--glass); color: var(--primary);
+  box-shadow: var(--glass-edge);
+  backdrop-filter: blur(8px) saturate(140%);
+  -webkit-backdrop-filter: blur(8px) saturate(140%);
 }
-.fab:active { transform: scale(.93); }
+.dock-btn:active { transform: scale(.94); }
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .tabbar, .dock-btn { background: var(--glass-solid); }
+}
 
 /* --------------------------------------------------------------- форма */
 
@@ -489,7 +519,6 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
   padding: 11px 8px; border: none; border-radius: 999px;
   background: none; color: var(--ink-2); font-size: 14px; font-weight: 600;
 }
-.sw .emo { font-size: 15px; }
 .sw.active { background: var(--primary); color: #fff; }
 
 .field { display: block; margin-bottom: 18px; }
@@ -507,8 +536,8 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
 .magic-btn {
   position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
   width: 38px; height: 38px; border-radius: 12px; border: none;
-  display: grid; place-items: center; font-size: 17px;
-  background: var(--primary);
+  display: grid; place-items: center;
+  background: var(--primary); color: #fff;
 }
 .magic-btn:disabled { opacity: .5; }
 
@@ -529,8 +558,9 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   text-align: center; color: var(--ink-2);
 }
-.cat-ic { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; font-size: 17px; }
-.cat span:not(.emo) { font-size: 11px; font-weight: 600; line-height: 1.2; }
+.cat-ic { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; }
+.cat-ic .ic { width: 19px; height: 19px; }
+.cat span { font-size: 11px; font-weight: 600; line-height: 1.2; }
 .cat.active { border-color: var(--primary); color: var(--ink); }
 
 .chips { display: flex; flex-wrap: wrap; gap: 7px; }
@@ -561,7 +591,7 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
 
 .toast {
   position: fixed; left: 50%; transform: translateX(-50%);
-  bottom: calc(var(--tabbar) + var(--tabbar-gap) * 2 + 66px + var(--safe-bottom));
+  bottom: calc(var(--tabbar) + var(--tabbar-gap) * 2 + 26px + var(--safe-bottom));
   z-index: 30; max-width: min(420px, calc(100% - 32px));
   background: var(--sunk); color: var(--ink);
   padding: 12px 18px; border-radius: 999px;
@@ -597,8 +627,7 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
   .fund-value { font-size: 46px; }
   .panel-title { font-size: 30px; }
 
-  .tabbar { width: auto; padding: 4px 6px; }
-  .tabbtn { min-width: 96px; padding: 0 10px; }
+  .tabbar { grid-template-columns: repeat(3, 96px); }
 }
 
 @media (min-width: 1200px) {
