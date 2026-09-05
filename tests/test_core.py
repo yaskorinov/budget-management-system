@@ -99,6 +99,37 @@ async def main():
     app_settings.llm_api_key = ""
     print("заголовки запроса: только ascii")
 
+    # Голосовое Telegram приходит в ogg/opus — модели ждут mp3 или wav
+    import io as _io
+
+    import numpy as _np
+    import soundfile as _sf
+
+    from app.core.voice import to_mp3
+
+    rate = 48000
+    tone = (0.3 * _np.sin(_np.linspace(0, 2 * _np.pi * 220 * 3, rate * 3))).astype("float32")
+    source = _io.BytesIO()
+    _sf.write(source, tone, rate, format="OGG", subtype="OPUS")
+    original = source.getvalue()
+
+    converted, fmt = to_mp3(original)
+    assert fmt == "mp3", f"ожидался mp3, вышло {fmt!r}"
+    assert len(converted) < len(original), "перекодировка должна облегчать запись"
+    back, back_rate = _sf.read(_io.BytesIO(converted))
+    assert back_rate == 16000, f"речь ждут в 16 кГц, вышло {back_rate}"
+    assert back.ndim == 1, "должно быть моно"
+    print(f"голос: ogg {len(original)} -> mp3 {len(converted)} байт, 16 кГц моно")
+
+    # битый файл не должен ронять расшифровку
+    import logging as _logging
+
+    _logging.getLogger("app.core.voice").setLevel(_logging.CRITICAL)
+    same, empty_fmt = to_mp3(b"not audio")
+    _logging.getLogger("app.core.voice").setLevel(_logging.NOTSET)
+    assert same == b"not audio" and empty_fmt == "", "нераспознанное уходит как есть"
+
+
 
     print("\nOK: ядро работает")
 

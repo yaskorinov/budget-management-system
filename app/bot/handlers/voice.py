@@ -11,7 +11,8 @@ import io
 from aiogram import Bot, F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.types import InputRichMessage, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards, texts
@@ -90,12 +91,28 @@ async def voice_message(
         await answer_rich(message, NO_GROUP_HINT)
         return
 
+    # Расшифровка занимает секунды: без этого сообщения кажется, что бот молчит
+    notice = await answer_rich(
+        message,
+        texts.join("🎤 ", texts.italic("Обрабатываю голосовое…")),
+        reply=True,
+    )
+
+    async def say(markdown: object) -> None:
+        """Дописывает то же сообщение, чтобы не плодить их в чате."""
+        try:
+            await bot.edit_message_text(
+                rich_message=InputRichMessage(markdown=str(markdown)),
+                chat_id=notice.chat.id,
+                message_id=notice.message_id,
+            )
+        except TelegramBadRequest:
+            await answer_rich(message, markdown, reply=True)
+
     await bot.send_chat_action(message.chat.id, "typing")
     audio = await _download(bot, media.file_id)
     if audio is None:
-        await answer_rich(
-            message, texts.join("Запись слишком длинная — уложитесь в пару минут."), reply=True
-        )
+        await say(texts.join("Запись слишком длинная — уложитесь в пару минут."))
         return
 
     fmt = stt.audio_format(media.mime_type, getattr(media, "file_name", None))
@@ -103,32 +120,25 @@ async def voice_message(
         text = await stt.transcribe(audio, fmt)
     except stt.VoiceUnavailable:
         # Причина уже в логе: ключ, баланс, лимит. Человеку нужен выход, а не код ошибки
-        await answer_rich(
-            message,
+        await say(
             texts.blocks(
                 texts.join("Распознавание сейчас недоступно."),
                 texts.italic("Запишите операцию текстом: молоко хлеб 850"),
-            ),
-            reply=True,
+            )
         )
         return
+
     if not text:
-        await answer_rich(
-            message,
+        await say(
             texts.blocks(
                 texts.join("Не разобрал запись."),
                 texts.italic("Попробуйте ещё раз или напишите текстом: молоко хлеб 850"),
-            ),
-            reply=True,
+            )
         )
         return
 
     await state.clear()
-    await answer_rich(
-        message,
-        texts.blocks(texts.join("🎤 ", texts.italic("Услышал: ", text))),
-        reply=True,
-    )
+    await say(texts.join("🎤 ", texts.italic("Услышал: ", text)))
 
     contribution = CONTRIBUTION_RE.match(text)
     rest = contribution.group("rest") if contribution else text

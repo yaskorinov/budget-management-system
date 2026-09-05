@@ -585,7 +585,9 @@ async def main():
     await dp.feed_update(bot, upd(message=voice_msg("voice-1")))
     out = session.texts()
     show("голосовое: покупка", out)
+    assert any("Обрабатываю" in t for t in out), "ожидание должно быть видно"
     assert any("Услышал" in t for t in out), out
+    assert session.find("EditMessageText"), "расшифровка правит то же сообщение"
     assert any("850" in t.replace(" ", " ") for t in out), out
 
     heard["text"] = "внёс пять тысяч 5000"

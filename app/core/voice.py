@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import base64
+import io
 import logging
 
 from app.config import settings
@@ -48,11 +49,47 @@ def audio_format(mime: str | None, file_name: str | None = None) -> str:
     return "ogg"
 
 
+SPEECH_RATE = 16000  # речевые модели работают с 16 кГц, больше только утяжеляет
+
+
+def to_mp3(raw: bytes) -> tuple[bytes, str]:
+    """Голосовое Telegram (ogg/opus) -> mono mp3 16 кГц.
+
+    Модели принимают ogg не всегда, а mp3 понимают все. Заодно запись худеет
+    в несколько раз: она уходит в запрос как base64, и лишний вес — это
+    лишние секунды ожидания.
+
+    Если сконвертировать не вышло, возвращаем исходник как есть — пусть
+    попробует сервер.
+    """
+    try:
+        import numpy
+        import soundfile
+
+        data, rate = soundfile.read(io.BytesIO(raw), dtype="float32")
+        mono = data if data.ndim == 1 else data.mean(axis=1)
+
+        if rate != SPEECH_RATE:
+            length = int(len(mono) * SPEECH_RATE / rate)
+            points = numpy.linspace(0, len(mono) - 1, length)
+            mono = numpy.interp(points, numpy.arange(len(mono)), mono).astype("float32")
+
+        out = io.BytesIO()
+        soundfile.write(out, mono, SPEECH_RATE, format="MP3")
+        return out.getvalue(), "mp3"
+    except Exception as exc:
+        log.warning("Не удалось перекодировать запись (%s), отправляю как есть", exc)
+        return raw, ""
+
+
 async def transcribe(audio: bytes, fmt: str = "ogg") -> str | None:
     """Голос -> текст. None, если модель недоступна или ничего не разобрала."""
     if not settings.llm_enabled or not settings.llm_voice_model:
         return None
 
+    audio, converted = to_mp3(audio)
+    if converted:
+        fmt = converted
     encoded = base64.b64encode(audio).decode()
     try:
         answer = await chat(
