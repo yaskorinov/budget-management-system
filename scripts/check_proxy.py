@@ -37,7 +37,7 @@ async def tcp_reachable(host: str, port: int) -> tuple[bool, str]:
     except asyncio.TimeoutError:
         return False, "таймаут — пакет уходит и пропадает, похоже на фильтр"
     except ConnectionRefusedError:
-        return False, "отказ — порт закрыт или прокси слушает только loopback"
+        return False, "отказ — на этом адресе никто не слушает"
     except socket.gaierror as exc:
         return False, f"имя не разрешается ({exc})"
     except OSError as exc:
@@ -88,8 +88,9 @@ async def main() -> None:
         line(f"{label} через прокси", "работает" if ok else "НЕ работает", detail)
 
     print()
-    print("Если прокси доступен, а запрос висит — смотрите на стороне прокси:")
-    print("  он должен слушать 0.0.0.0 (ss -lntp | grep порт) и выпускать наружу.")
+    print("Отказ — посмотрите на хосте ss -lntp | grep порт:")
+    print("  прокси на 127.0.0.1 из обычного контейнера недостижим, поднимайте")
+    print("  бота оверлеем deploy/docker-compose.proxy.yml (сеть хоста).")
     print("Если порт отвечает, а SOCKS не отвечает — проверьте логин и пароль.")
 
 

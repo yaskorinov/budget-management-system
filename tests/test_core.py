@@ -123,24 +123,33 @@ async def main():
     import app.config as cfg
 
     app_settings.proxy_url = "socks5://127.0.0.1:1080"
-    assert cfg.proxy_warning(app_settings) is None, "вне контейнера предупреждать не о чем"
 
-    class InContainer:
+    class Flags:
+        docker = False
+        host_net = False
+
+    class FakePath:
         def __init__(self, path):
             pass
 
         def exists(self):
-            return True
+            return Flags.docker
 
-    real_path, cfg.Path = cfg.Path, InContainer
+    real_path, real_host_net = cfg.Path, cfg.in_host_network
+    cfg.Path, cfg.in_host_network = FakePath, lambda: Flags.host_net
     try:
-        assert "host.docker.internal" in (cfg.proxy_warning(app_settings) or "")
+        assert cfg.proxy_warning(app_settings) is None, "вне контейнера предупреждать не о чем"
+        Flags.docker = True
+        assert "docker-compose.proxy.yml" in (cfg.proxy_warning(app_settings) or "")
+        Flags.host_net = True
+        assert cfg.proxy_warning(app_settings) is None, "в сети хоста localhost ведёт на хост"
+        Flags.host_net = False
         app_settings.proxy_url = "socks5://host.docker.internal:1080"
         assert cfg.proxy_warning(app_settings) is None, "правильный адрес — молчим"
     finally:
-        cfg.Path = real_path
+        cfg.Path, cfg.in_host_network = real_path, real_host_net
         app_settings.proxy_url = ""
-    print("прокси в контейнере: подсказка про host.docker.internal")
+    print("прокси в контейнере: подсказка про сеть хоста")
 
 
 
