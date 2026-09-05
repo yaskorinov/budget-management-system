@@ -14,6 +14,7 @@ from app.db.base import utcnow
 from app.db.models import (
     CONTRIBUTION,
     PURCHASE,
+    DailyJob,
     Group,
     Membership,
     Operation,
@@ -574,6 +575,30 @@ async def stats_by_person(
 # --------------------------------------------------------------------------- #
 #  Вход в веб-версию
 # --------------------------------------------------------------------------- #
+
+
+async def claim_daily_job(
+    session: AsyncSession, *, group_id: int, job: str, today: dt.date
+) -> bool:
+    """Занимает ежедневное задание. False — сегодня его уже выполняли."""
+    row = await session.scalar(
+        select(DailyJob).where(DailyJob.group_id == group_id, DailyJob.job == job)
+    )
+    if row is None:
+        session.add(DailyJob(group_id=group_id, job=job, sent_on=today))
+        await session.flush()
+        return True
+    if row.sent_on >= today:
+        return False
+    row.sent_on = today
+    await session.flush()
+    return True
+
+
+async def groups_with_chats(session: AsyncSession) -> list[Group]:
+    """Бюджеты, привязанные к чату: только в них есть куда написать."""
+    rows = await session.scalars(select(Group).where(Group.tg_chat_id.is_not(None)))
+    return list(rows)
 
 
 async def create_login_token(

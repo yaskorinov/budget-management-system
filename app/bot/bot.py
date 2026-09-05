@@ -15,7 +15,7 @@ from aiogram.types import (
     ErrorEvent,
 )
 
-from app.bot.handlers import entry, fallback, inline, menu, operations, stats
+from app.bot.handlers import entry, fallback, inline, menu, operations, stats, voice
 from app.bot.middlewares import ContextMiddleware
 from app.config import settings
 
@@ -30,6 +30,7 @@ PRIVATE_COMMANDS = [
     BotCommand(command="ops", description="Мои операции"),
     BotCommand(command="groups", description="Выбрать активный бюджет"),
     BotCommand(command="newgroup", description="Создать бюджет"),
+    BotCommand(command="voice", description="Записать операцию голосом"),
     BotCommand(command="web", description="Ссылка на веб-версию"),
     BotCommand(command="help", description="Как пользоваться"),
 ]
@@ -41,6 +42,7 @@ GROUP_COMMANDS = [
     BotCommand(command="balance", description="Балансы участников"),
     BotCommand(command="stats", description="Диаграмма расходов"),
     BotCommand(command="ops", description="Последние операции"),
+    BotCommand(command="voice", description="Записать операцию голосом"),
     BotCommand(command="members", description="Участники"),
     BotCommand(command="help", description="Как пользоваться"),
 ]
@@ -78,6 +80,7 @@ def create_dispatcher() -> Dispatcher:
     dispatcher.include_router(entry.router)
     dispatcher.include_router(operations.router)
     dispatcher.include_router(stats.router)
+    dispatcher.include_router(voice.router)
     dispatcher.include_router(inline.router)
     dispatcher.include_router(fallback.router)
 

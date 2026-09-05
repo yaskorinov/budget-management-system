@@ -537,6 +537,132 @@ async def main():
         assert media and media[0]["id"] == "buy", f"{data}: ролик потерялся ({media})"
     print("\n### при выходе из правки ролик возвращается ✓")
 
+    # ---- голосовой ввод ----
+    import io
+
+    from aiogram.types import Voice
+
+    from app.config import settings as app_settings
+    from app.core import voice as stt
+
+    def voice_msg(text_id, user=ANYA, chat=PRIVATE):
+        _uid[0] += 1
+        m = Message(message_id=_uid[0], date=dt.datetime.now(), chat=chat, from_user=user,
+                    voice=Voice(file_id=text_id, file_unique_id="u", duration=3,
+                                mime_type="audio/ogg", file_size=2048))
+        return m.as_(bot)
+
+    heard = {"text": "купил молоко и хлеб 850"}
+
+    async def fake_transcribe(audio, fmt="ogg"):
+        assert fmt == "ogg", f"формат Telegram — ogg, пришло {fmt}"
+        return heard["text"]
+
+    async def fake_download(self, path, destination, **kwargs):
+        destination.write(b"fake-audio")
+        return destination
+
+    real_transcribe = stt.transcribe
+    stt.transcribe = fake_transcribe
+    import app.bot.handlers.voice as voice_module
+    voice_module.stt.transcribe = fake_transcribe
+    bot.download_file = fake_download.__get__(bot)
+
+    # Включаем ветку с расшифровкой. Категоризацию при этом в сеть не пускаем:
+    # подменяем запрос так, чтобы сработал словарный фолбэк
+    from app.core import classifier
+
+    async def no_network(*args, **kwargs):
+        raise RuntimeError("в тестах сети нет")
+
+    real_chat = classifier.chat
+    classifier.chat = no_network
+    logging.getLogger("app.core.classifier").setLevel(logging.CRITICAL)
+    app_settings.llm_provider = "openai_compat"
+    app_settings.llm_api_key = "test-key"
+
+    session.reset()
+    await dp.feed_update(bot, upd(message=voice_msg("voice-1")))
+    out = session.texts()
+    show("голосовое: покупка", out)
+    assert any("Услышал" in t for t in out), out
+    assert any("850" in t.replace(" ", " ") for t in out), out
+
+    heard["text"] = "внёс пять тысяч 5000"
+    session.reset()
+    await dp.feed_update(bot, upd(message=voice_msg("voice-2")))
+    out = session.texts()
+    assert any("Взнос в фонд" in t for t in out), out
+    print("\n### голос: покупка и взнос записываются ✓")
+
+    # не разобрали — операция не создаётся
+    async def silent(audio, fmt="ogg"):
+        return None
+
+    voice_module.stt.transcribe = silent
+    session.reset()
+    await dp.feed_update(bot, upd(message=voice_msg("voice-3")))
+    assert any("Не разобрал" in t for t in session.texts()), session.texts()
+    print("### неразборчивую запись бот не выдумывает ✓")
+
+    # ---- ежедневные сообщения ----
+    import datetime as _dt
+
+    from app.bot import scheduler
+    from app.core import insights
+
+    async def fake_tip(session_, group_):
+        return "Продукты съедают половину бюджета — попробуйте закупаться раз в неделю."
+
+    async def fake_note():
+        return "Фонд немного просел — пополните, когда будет удобно."
+
+    real_tip, real_note = insights.spending_tip, insights.debt_note
+    scheduler.insights.spending_tip = fake_tip
+    scheduler.insights.debt_note = fake_note
+    app_settings.tips_hour, app_settings.debts_hour = 9, 9
+
+    session.reset()
+    morning = _dt.datetime(2026, 9, 10, 9, 30)
+    sent = await scheduler.run_due_jobs(bot, now=morning)
+    texts_sent = [
+        (data.get("rich_message") or {}).get("markdown", "")
+        for name, data in session.calls if name == "SendRichMessage"
+    ]
+    show("ежедневные сообщения", texts_sent)
+    assert any("Совет по расходам" in t for t in texts_sent), texts_sent
+    assert any("Общий фонд" in t and "Нужно внести" in t for t in texts_sent), texts_sent
+    print(f"\n### совет и напоминание отправлены ({sent}) ✓")
+
+    # второй запуск в тот же день ничего не шлёт
+    session.reset()
+    again = await scheduler.run_due_jobs(bot, now=morning.replace(hour=23))
+    assert again == 0 and not session.find("SendRichMessage"), "дубли за день недопустимы"
+    print("### повторно за день не рассылается ✓")
+
+    # на следующий день — снова
+    session.reset()
+    tomorrow = await scheduler.run_due_jobs(bot, now=morning + _dt.timedelta(days=1))
+    assert tomorrow > 0, "на следующий день сообщения должны уйти"
+    print("### на следующий день рассылка повторяется ✓")
+
+    # до назначенного часа молчим
+    app_settings.tips_hour, app_settings.debts_hour = 20, 20
+    session.reset()
+    early = await scheduler.run_due_jobs(bot, now=morning + _dt.timedelta(days=2))
+    assert early == 0, "до нужного часа рассылки быть не должно"
+    print("### до назначенного часа не пишет ✓")
+
+    insights.spending_tip, insights.debt_note = real_tip, real_note
+
+
+    voice_module.stt.transcribe = real_transcribe
+    classifier.chat = real_chat
+    logging.getLogger("app.core.classifier").setLevel(logging.NOTSET)
+    app_settings.llm_provider = "off"
+    app_settings.llm_api_key = ""
+
+
     from aiogram.types import Animation
 
     def card_with_gif(chat, message_id=8888):

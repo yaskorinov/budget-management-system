@@ -21,8 +21,13 @@ SAMPLES = [
 
 async def main() -> None:
     texts = sys.argv[1:] or SAMPLES
-    print(f"Провайдер: {settings.llm_provider} · модель: {settings.llm_model} · "
-          f"ключ: {'есть' if settings.llm_api_key else 'НЕТ'}\n")
+    print(f"Провайдер: {settings.llm_provider}")
+    print(f"Адрес:     {settings.llm_base_url or chr(8212)}")
+    print(f"Модель:    {settings.llm_model}")
+    print(f"Голос:     {settings.llm_voice_model}")
+    key = 'есть' if settings.llm_api_key else 'НЕТ'
+    print(f"Ключ:      {key}")
+    print()
     for text in texts:
         parsed = await parse_purchase(text)
         amount = f"{parsed.amount / 100:.2f}" if parsed.amount else "—"

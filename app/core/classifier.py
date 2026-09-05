@@ -100,27 +100,57 @@ async def _call_anthropic(text: str) -> dict:
         await client.close()
 
 
-async def _call_openai_compatible(text: str) -> dict:
+def _headers() -> dict[str, str]:
+    headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
+    if "openrouter" in settings.llm_base_url:
+        # OpenRouter просит представиться: по этим полям он показывает
+        # приложение в статистике ключа
+        headers["X-Title"] = "Общий бюджет"
+        headers["HTTP-Referer"] = settings.public_base or "https://t.me"
+    return headers
+
+
+async def chat(
+    messages: list[dict],
+    *,
+    model: str | None = None,
+    max_tokens: int = 256,
+    temperature: float = 0.0,
+    json_object: bool = False,
+    timeout: float | None = None,
+) -> str:
+    """Запрос к OpenAI-совместимому эндпоинту. Возвращает текст ответа."""
     import httpx
 
     base = (settings.llm_base_url or "https://api.openai.com/v1").rstrip("/")
-    async with httpx.AsyncClient(timeout=settings.llm_timeout_seconds) as client:
+    payload: dict = {
+        "model": model or settings.llm_model,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "messages": messages,
+    }
+    if json_object:
+        payload["response_format"] = {"type": "json_object"}
+
+    async with httpx.AsyncClient(
+        timeout=timeout or settings.llm_timeout_seconds
+    ) as client:
         response = await client.post(
-            f"{base}/chat/completions",
-            headers={"Authorization": f"Bearer {settings.llm_api_key}"},
-            json={
-                "model": settings.llm_model,
-                "max_tokens": 256,
-                "temperature": 0,
-                "response_format": {"type": "json_object"},
-                "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": text},
-                ],
-            },
+            f"{base}/chat/completions", headers=_headers(), json=payload
         )
         response.raise_for_status()
-        return _extract_json(response.json()["choices"][0]["message"]["content"])
+        return response.json()["choices"][0]["message"]["content"]
+
+
+async def _call_openai_compatible(text: str) -> dict:
+    answer = await chat(
+        [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": text},
+        ],
+        json_object=True,
+    )
+    return _extract_json(answer)
 
 
 async def classify(text: str) -> Classification:

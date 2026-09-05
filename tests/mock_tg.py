@@ -44,6 +44,11 @@ class MockSession(BaseSession):
 
         if name == "GetMe":
             return BOT_USER
+        if name == "GetFile":
+            from aiogram.types import File
+
+            return File(file_id=data.get("file_id", "f"), file_unique_id="u",
+                        file_size=1024, file_path="voice/note.oga")
         if name == "GetChatAdministrators":
             return [
                 ChatMemberOwner(

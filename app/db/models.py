@@ -5,6 +5,7 @@ import datetime as dt
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -129,6 +130,22 @@ class OperationShare(Base):
 
     operation: Mapped[Operation] = relationship(back_populates="shares")
     user: Mapped[User] = relationship(lazy="selectin")
+
+
+class DailyJob(Base):
+    """Отметка, что ежедневное сообщение по группе уже отправлено.
+
+    Хранится в базе, а не в памяти: иначе перезапуск в неудачный час прислал
+    бы совет и напоминание повторно.
+    """
+
+    __tablename__ = "daily_jobs"
+    __table_args__ = (UniqueConstraint("group_id", "job", name="uq_daily_job"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("groups.id", ondelete="CASCADE"))
+    job: Mapped[str] = mapped_column(String(16))  # tips | debts
+    sent_on: Mapped[dt.date] = mapped_column(Date)
 
 
 class WebLoginToken(Base):

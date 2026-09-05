@@ -15,6 +15,7 @@ from aiogram.types import Update
 
 from app.api.routes import charts_router, router
 from app.bot.bot import create_bot, create_dispatcher, setup_bot_commands
+from app.bot.scheduler import daily_loop
 from app.config import BASE_DIR, settings
 from app.db.base import init_db
 
@@ -31,6 +32,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.dispatcher = None
     bot = None
     polling: asyncio.Task | None = None
+    daily: asyncio.Task | None = None
     dispatcher = None
 
     try:
@@ -61,12 +63,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 dispatcher.start_polling(bot, allowed_updates=allowed)
             )
             log.info("Бот запущен в режиме long polling")
+
+        daily = asyncio.create_task(daily_loop(bot))
     except Exception as exc:
         log.error("Бот не запустился (%s). Веб-часть продолжает работать.", exc)
 
     try:
         yield
     finally:
+        if daily is not None:
+            daily.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await daily
         if polling is not None and dispatcher is not None:
             await dispatcher.stop_polling()
             polling.cancel()
