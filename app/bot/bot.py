@@ -7,6 +7,7 @@ from contextlib import suppress
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import (
     BotCommand,
@@ -20,6 +21,16 @@ from app.bot.middlewares import ContextMiddleware
 from app.config import settings
 
 log = logging.getLogger(__name__)
+
+
+def _hide_password(url: str) -> str:
+    """Прокси попадает в лог, а пароль в логе не нужен."""
+    if "@" not in url:
+        return url
+    head, _, tail = url.rpartition("@")
+    scheme, _, credentials = head.partition("://")
+    user = credentials.split(":")[0]
+    return f"{scheme}://{user}:***@{tail}"
 
 PRIVATE_COMMANDS = [
     BotCommand(command="start", description="Меню и балансы"),
@@ -51,7 +62,15 @@ GROUP_COMMANDS = [
 def create_bot() -> Bot:
     if not settings.bot_token:
         raise RuntimeError("BOT_TOKEN не задан — заполните .env")
+
+    session = None
+    if settings.telegram_proxy:
+        # socks5 требует aiohttp-socks; без него aiogram скажет об этом сам
+        session = AiohttpSession(proxy=settings.telegram_proxy)
+        log.info("Telegram через прокси %s", _hide_password(settings.telegram_proxy))
+
     return Bot(
+        session=session,
         token=settings.bot_token,
         # parse_mode не задаём: форматированные сообщения уходят через
         # sendRichMessage, а подписи к диаграммам — обычным текстом.

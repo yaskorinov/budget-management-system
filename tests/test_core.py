@@ -99,6 +99,27 @@ async def main():
     app_settings.llm_api_key = ""
     print("заголовки запроса: только ascii")
 
+    # Прокси: общий применяется ко всему, отдельный перекрывает его для модели
+    app_settings.proxy_url = "socks5://user:secret@1.2.3.4:1080"
+    app_settings.llm_proxy_url = ""
+    assert app_settings.telegram_proxy == app_settings.proxy_url
+    assert app_settings.llm_proxy == app_settings.proxy_url
+
+    app_settings.llm_proxy_url = "socks5://5.6.7.8:1080"
+    assert app_settings.llm_proxy == "socks5://5.6.7.8:1080"
+    assert app_settings.telegram_proxy == "socks5://user:secret@1.2.3.4:1080"
+
+    app_settings.proxy_url = ""
+    assert app_settings.telegram_proxy is None, "без общего прокси Telegram идёт напрямую"
+    assert app_settings.llm_proxy == "socks5://5.6.7.8:1080"
+
+    from app.bot.bot import _hide_password
+
+    assert "secret" not in _hide_password("socks5://user:secret@1.2.3.4:1080")
+    app_settings.llm_proxy_url = ""
+    print("прокси: общий и отдельный для модели, пароль в лог не попадает")
+
+
     # Голосовое Telegram приходит в ogg/opus — модели ждут mp3 или wav
     import io as _io
 

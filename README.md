@@ -131,6 +131,8 @@ python scripts/check_llm.py "туалетка и фейри 450"
 | `SECRET_KEY` | подпись сессий веба (`openssl rand -hex 32`) |
 | `DATABASE_URL` | по умолчанию SQLite; для Postgres — `postgresql+asyncpg://…` |
 | `TZ_OFFSET_HOURS` | часовой пояс для границ периодов (3 = Москва) |
+| `PROXY_URL` | выходной прокси на весь трафик, например `socks5://user:pass@host:1080` |
+| `LLM_PROXY_URL` | прокси только для запросов к модели; перекрывает `PROXY_URL` |
 | `LLM_PROVIDER` | `anthropic`, `openai_compat` или `off` |
 | `LLM_API_KEY` / `LLM_MODEL` / `LLM_BASE_URL` | доступ к LLM |
 
@@ -164,6 +166,11 @@ LLM_VOICE_MODEL=nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
 Категоризация при сбое молча уходит в словарь, поэтому проблему видно не сразу
 — проверяйте `python scripts/check_llm.py`: он делает пробный запрос и печатает
 ответ сервера целиком.
+
+**Про прокси.** `PROXY_URL` уводит через прокси и Telegram, и модель;
+`LLM_PROXY_URL` — только модель. Обычно нужен второй: Telegram доступен, а API
+модели закрыт по региону. Схемы — `socks5://`, `socks5h://` (домены резолвит
+прокси) и `http://`. Пароль в логах маскируется.
 
 ## Настройка бота в BotFather
 

@@ -8,6 +8,7 @@ itsdangerous==2.2.0
 matplotlib==3.10.7
 soundfile==0.13.1  # ogg/opus -> mp3 для /voice; libsndfile идёт в колесе
 anthropic>=0.75
-httpx>=0.28
+httpx[socks]>=0.28
+aiohttp-socks==0.10.1  # socks5 для Telegram; нужен только при PROXY_URL
 # Postgres (опционально, если DATABASE_URL=postgresql+asyncpg://...)
 # asyncpg==0.31.0

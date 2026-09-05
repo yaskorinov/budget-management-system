@@ -81,6 +81,10 @@ async def _call_anthropic(text: str) -> dict:
     kwargs = {"api_key": settings.llm_api_key, "timeout": settings.llm_timeout_seconds}
     if settings.llm_base_url:
         kwargs["base_url"] = settings.llm_base_url
+    if settings.llm_proxy:
+        from anthropic import DefaultAsyncHttpxClient
+
+        kwargs["http_client"] = DefaultAsyncHttpxClient(proxy=settings.llm_proxy)
 
     client = AsyncAnthropic(**kwargs)
     try:
@@ -138,7 +142,8 @@ async def chat(
         payload["response_format"] = {"type": "json_object"}
 
     async with httpx.AsyncClient(
-        timeout=timeout or settings.llm_timeout_seconds
+        timeout=timeout or settings.llm_timeout_seconds,
+        proxy=settings.llm_proxy,  # socks5 требует httpx[socks]
     ) as client:
 
         async def ask(body: dict) -> httpx.Response:

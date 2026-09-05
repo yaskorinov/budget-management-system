@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     public_base_url: str = ""
     secret_key: str = "change-me-please"
 
+    # Выходной прокси, например socks5://user:pass@host:1080.
+    # proxy_url — на весь исходящий трафик; llm_proxy_url перекрывает его
+    # для запросов к модели: часто через прокси нужен только он
+    proxy_url: str = ""
+    llm_proxy_url: str = ""
+
     # Database
     database_url: str = "sqlite+aiosqlite:///./data/expenses.db"
 
@@ -58,6 +64,14 @@ class Settings(BaseSettings):
     @property
     def webhook_url(self) -> str:
         return f"{self.public_base}{self.webhook_path}"
+
+    @property
+    def telegram_proxy(self) -> str | None:
+        return self.proxy_url or None
+
+    @property
+    def llm_proxy(self) -> str | None:
+        return self.llm_proxy_url or self.proxy_url or None
 
     @property
     def llm_enabled(self) -> bool:
