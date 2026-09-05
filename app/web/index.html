@@ -186,7 +186,7 @@
     </div>
 
     <div class="sheet-body">
-      <div class="switch" id="kind-switch">
+      <div class="switch" id="kind-switch" data-active="0">
         <button type="button" class="sw active" data-kind="purchase">
           <svg class="ic ic-18"><use href="#i-cart"/></svg>Покупка
         </button>
@@ -195,16 +195,18 @@
         </button>
       </div>
 
-      <div id="purchase-fields">
-        <label class="field">
-          <span class="eyebrow">Опишите словами</span>
-          <div class="magic">
-            <input id="raw-text" type="text" placeholder="молоко хлеб яйца 850">
-            <button type="button" id="parse-btn" class="magic-btn" aria-label="Разобрать через ИИ">
-              <svg class="ic ic-20"><use href="#i-spark"/></svg>
-            </button>
-          </div>
-        </label>
+      <div id="purchase-fields" class="collapse open">
+        <div>
+          <label class="field">
+            <span class="eyebrow">Опишите словами</span>
+            <div class="magic">
+              <input id="raw-text" type="text" placeholder="молоко хлеб яйца 850">
+              <button type="button" id="parse-btn" class="magic-btn" aria-label="Разобрать через ИИ">
+                <svg class="ic ic-20"><use href="#i-spark"/></svg>
+              </button>
+            </div>
+          </label>
+        </div>
       </div>
 
       <label class="field amount-field">
@@ -215,19 +217,23 @@
         </div>
       </label>
 
-      <label class="field" id="title-field">
-        <span class="eyebrow">Название</span>
-        <input id="title" type="text" placeholder="Продукты">
-      </label>
+      <div id="purchase-details" class="collapse open">
+        <div>
+          <label class="field">
+            <span class="eyebrow">Название</span>
+            <input id="title" type="text" placeholder="Продукты">
+          </label>
 
-      <div class="field" id="category-field">
-        <span class="eyebrow">Категория</span>
-        <div id="categories" class="cats"></div>
-      </div>
+          <div class="field">
+            <span class="eyebrow">Категория</span>
+            <div id="categories" class="cats"></div>
+          </div>
 
-      <div class="field" id="participants-field">
-        <span class="eyebrow">Делим между</span>
-        <div id="participants" class="chips"></div>
+          <div class="field">
+            <span class="eyebrow">Делим между</span>
+            <div id="participants" class="chips"></div>
+          </div>
+        </div>
       </div>
 
       <p id="add-status" class="status"></p>

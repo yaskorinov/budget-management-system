@@ -507,6 +507,13 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
 .sheet-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, .6); animation: fade .2s ease; }
 @keyframes fade { from { opacity: 0; } }
 
+/* Закрытие проигрывается тем же движением, что и открытие, только назад:
+   мгновенное исчезновение читается как сбой. */
+.sheet.closing .sheet-card { animation: slideOut .22s ease both; }
+.sheet.closing .sheet-backdrop { animation: fadeOut .22s ease both; }
+@keyframes slideOut { to { transform: translateY(100%); } }
+@keyframes fadeOut { to { opacity: 0; } }
+
 .sheet-card {
   position: relative; width: 100%; max-width: 560px;
   max-height: 92dvh; display: flex; flex-direction: column;
@@ -526,13 +533,36 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
   display: grid; gap: 8px;
 }
 
-.switch { display: flex; gap: 5px; padding: 5px; background: var(--card); border-radius: 999px; margin-bottom: 18px; }
+/* Как и в нижней панели, выбранное отмечает подвижная плашка. */
+.switch {
+  position: relative;
+  display: grid; grid-template-columns: repeat(2, 1fr);
+  padding: 5px; background: var(--card); border-radius: 999px; margin-bottom: 18px;
+}
+.switch::after {
+  content: ""; position: absolute; left: 5px; top: 5px;
+  width: calc((100% - 10px) / 2); height: calc(100% - 10px);
+  border-radius: 999px; background: var(--primary);
+  transition: translate .25s cubic-bezier(1, 0, .4, 1);
+}
+.switch[data-active="1"]::after { translate: 100% 0; }
 .sw {
-  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  position: relative; z-index: 1;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
   padding: 11px 8px; border: none; border-radius: 999px;
   background: none; color: var(--ink-2); font-size: 14px; font-weight: 600;
+  transition: color .2s ease;
 }
-.sw.active { background: var(--primary); color: #fff; }
+.sw.active { color: #fff; }
+
+/* Поля покупки не пропадают рывком: строка грида уезжает в ноль, поэтому
+   высота шторки меняется плавно. */
+.collapse {
+  display: grid; grid-template-rows: 0fr; opacity: 0;
+  transition: grid-template-rows .28s ease, opacity .2s ease;
+}
+.collapse > * { overflow: hidden; min-height: 0; }
+.collapse.open { grid-template-rows: 1fr; opacity: 1; }
 
 .field { display: block; margin-bottom: 18px; }
 .field > .eyebrow { margin-bottom: 7px; }
