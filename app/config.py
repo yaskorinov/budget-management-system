@@ -34,11 +34,11 @@ class Settings(BaseSettings):
     # LLM
     llm_provider: str = "openai_compat"  # anthropic | openai_compat | off
     llm_api_key: str = ""
-    llm_model: str = "nvidia/nemotron-3.5-lightning:free"
-    llm_base_url: str = "https://openrouter.ai/api/v1"
+    llm_model: str = "gemini-3.5-flash-lite"
+    llm_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     llm_timeout_seconds: float = 8.0
     # Модель для расшифровки голоса: основная принимает только текст
-    llm_voice_model: str = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
+    llm_voice_model: str = "gemini-3.5-flash"
     llm_voice_timeout_seconds: float = 60.0
 
     # Ежедневные сообщения, часы по локальному времени; -1 — выключить

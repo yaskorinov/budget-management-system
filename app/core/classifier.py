@@ -140,9 +140,19 @@ async def chat(
     async with httpx.AsyncClient(
         timeout=timeout or settings.llm_timeout_seconds
     ) as client:
-        response = await client.post(
-            f"{base}/chat/completions", headers=_headers(), json=payload
-        )
+
+        async def ask(body: dict) -> httpx.Response:
+            return await client.post(
+                f"{base}/chat/completions", headers=_headers(), json=body
+            )
+
+        response = await ask(payload)
+        if response.is_error and json_object and response.status_code < 500:
+            # response_format принимают не все провайдеры, а из-за него срывается
+            # весь запрос. JSON из обычного ответа мы и так умеем доставать
+            payload.pop("response_format", None)
+            response = await ask(payload)
+
         if response.is_error:
             # raise_for_status показывает только код, а причина — в теле ответа:
             # без неё «402» не отличить от «модель не найдена»
