@@ -234,9 +234,10 @@ function renderBalances(summary) {
     const top = el('div', 'balance-top');
     top.append(el('div', 'avatar', initial(item.name)), el('div', 'balance-name', item.name));
 
-    card.append(top, el('div', 'balance-sum', signed(item.balance)));
+    card.append(top);
     card.appendChild(el('div', 'balance-note',
       item.balance > 0 ? 'переплатил' : item.balance < 0 ? 'нужно доложить' : 'в расчёте'));
+    card.appendChild(el('div', `pill-sum ${sign || 'flat'}`, signed(item.balance)));
     box.appendChild(card);
   });
 }
@@ -277,8 +278,8 @@ function operationRow(operation) {
     : '';
   main.appendChild(el('div', 'op-meta', `${operation.author} · ${when}${people}`));
 
-  const right = el('div', 'op-right');
-  right.appendChild(el('div', 'op-sum',
+  const foot = el('div', 'op-foot');
+  foot.appendChild(el('div', 'op-sum',
     contribution ? `+${money(operation.amount)}` : money(operation.amount)));
 
   if (operation.can_edit) {
@@ -297,10 +298,11 @@ function operationRow(operation) {
     remove.onclick = () => removeOperation(operation);
 
     actions.append(edit, remove);
-    right.appendChild(actions);
+    foot.appendChild(actions);
   }
 
-  row.append(badge, main, right);
+  main.appendChild(foot);
+  row.append(badge, main);
   return row;
 }
 
@@ -710,26 +712,31 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !$('sheet').hidden) closeSheet();
 });
 
+// Telegram знает про чёлку и полоску жеста больше, чем env(safe-area-*):
+// в мини-аппе он отдаёт свои отступы, из них и считаем поля экрана.
+function applyInsets() {
+  if (!tg) return;
+  const root = document.documentElement.style;
+  const safe = tg.safeAreaInset || {};
+  const content = tg.contentSafeAreaInset || {};
+  const top = (safe.top || 0) + (content.top || 0);
+  const bottom = (safe.bottom || 0) + (content.bottom || 0);
+  if (top) root.setProperty('--safe-top', `${top}px`);
+  if (bottom) root.setProperty('--safe-bottom', `${bottom}px`);
+}
+
 if (tg) {
   tg.ready();
   tg.expand();
-
-  // В мини-аппе тему задаёт Telegram. В обычном браузере скрипт Telegram тоже
-  // загружается и рапортует светлую тему — там мы к нему не прислушиваемся,
-  // иначе тёмная тема системы никогда не включится.
-  const applyTheme = () => {
-    document.documentElement.dataset.theme = tg.colorScheme || 'light';
-    try {
-      const bg = getComputedStyle(document.body).getPropertyValue('--bg').trim();
-      tg.setHeaderColor(bg);
-      tg.setBackgroundColor(bg);
-    } catch (_) { /* старый клиент цвет шапки не умеет */ }
-  };
-
-  if (tg.platform && tg.platform !== 'unknown') {
-    applyTheme();
-    tg.onEvent('themeChanged', applyTheme);
-  }
+  applyInsets();
+  ['safeAreaChanged', 'contentSafeAreaChanged', 'viewportChanged'].forEach((event) => {
+    try { tg.onEvent(event, applyInsets); } catch (_) { /* старый клиент */ }
+  });
+  // Интерфейс всегда тёмный, поэтому и шапку клиента красим под него.
+  try {
+    tg.setHeaderColor('#141414');
+    tg.setBackgroundColor('#141414');
+  } catch (_) { /* старый клиент цвет шапки не умеет */ }
 }
 
 updateKindFields();
