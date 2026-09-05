@@ -27,15 +27,17 @@ async def seed():
     async with session_scope() as s:
         a = await service.get_or_create_user(s, tg_user_id=11, first_name="Аня")
         b = await service.get_or_create_user(s, tg_user_id=22, first_name="Боря")
-        g = await service.get_or_create_group_for_chat(s, tg_chat_id=-777, title="Тестовая квартира")
+        g, _ = await service.get_or_create_group_for_chat(s, tg_chat_id=-777, title="Тестовая квартира")
         for u in (a, b):
             await service.ensure_member(s, group_id=g.id, user_id=u.id)
-        ids = (a.id, b.id, g.id)
+        split = await service.create_group(s, title="Поход", owner=a, mode="split")
+        await service.ensure_member(s, group_id=split.id, user_id=b.id)
+        ids = (a.id, b.id, g.id, split.id)
     await engine.dispose()
     return ids
 
 
-aid, bid, gid = asyncio.run(seed())
+aid, bid, gid, sid = asyncio.run(seed())
 
 with TestClient(app) as client:
     h = {"Authorization": f"Bearer {issue_session(aid)}"}
@@ -85,6 +87,39 @@ with TestClient(app) as client:
 
     assert client.delete(f"/api/operations/{op['id']}", headers=h).status_code == 204
     assert client.get(f"/api/groups/{gid}/summary", headers=h).json()["fund_left"] == 1000000
+
+
+    # ------------------------------------------------------ режим дележа --
+    assert client.get(f"/api/groups/{sid}/summary", headers=h).json()["mode"] == "split"
+
+    r = client.post(f"/api/groups/{sid}/operations", headers=h,
+                    json={"kind": "purchase", "amount": 60000, "category": "food",
+                          "title": "Продукты в дорогу", "participant_ids": [aid, bid]})
+    assert r.status_code == 201, r.text
+
+    sp = client.get(f"/api/groups/{sid}/summary", headers=h).json()
+    print("дележ:", [(m["name"], m["balance"]) for m in sp["members"]],
+          "| долги:", [(d["from_name"], d["to_name"], d["amount"]) for d in sp["debts"]])
+    assert sp["fund_left"] == 0, "кассы в этом режиме нет"
+    assert sum(m["balance"] for m in sp["members"]) == 0
+    assert sp["debts"] == [{"from_user_id": bid, "from_name": "Боря",
+                            "to_user_id": aid, "to_name": "Аня", "amount": 30000}]
+
+    assert client.post(f"/api/groups/{sid}/operations", headers=h,
+                       json={"kind": "contribution", "amount": 1000}).status_code == 400, \
+        "взнос в кассу в режиме дележа недопустим"
+
+    hb2 = {"Authorization": f"Bearer {issue_session(bid)}"}
+    r = client.post(f"/api/groups/{sid}/operations", headers=hb2,
+                    json={"kind": "transfer", "amount": 30000, "to_user_id": aid})
+    assert r.status_code == 201, r.text
+    assert r.json()["to_user"] == "Аня" and r.json()["kind"] == "transfer"
+
+    assert client.get(f"/api/groups/{sid}/summary", headers=h).json()["debts"] == [], \
+        "возврат закрыл долг"
+    assert client.post(f"/api/groups/{sid}/operations", headers=hb2,
+                       json={"kind": "transfer", "amount": 100}).status_code == 400, \
+        "перевод без получателя недопустим"
 
     assert client.get("/").status_code == 200
     assert "Общий бюджет" in client.get("/").text

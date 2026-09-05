@@ -33,3 +33,17 @@ class GroupCB(CallbackData, prefix="g"):
 class OpsPageCB(CallbackData, prefix="p"):
     scope: str  # mine | all
     offset: int = 0
+
+
+class ModeCB(CallbackData, prefix="md"):
+    """Выбор режима расчётов сразу после создания бюджета."""
+
+    group_id: int
+    mode: str  # fund | split
+
+
+class PayCB(CallbackData, prefix="pay"):
+    """Кому уходит возврат долга. Сумма уже разобрана — несём её в кнопке."""
+
+    to_id: int
+    amount: int

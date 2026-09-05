@@ -24,6 +24,7 @@ class GroupOut(BaseModel):
     id: int
     title: str
     currency: str
+    mode: str = "fund"  # fund — общая касса, split — делим расходы
 
 
 class AuthOut(BaseModel):
@@ -41,7 +42,7 @@ class ShareOut(BaseModel):
 
 class OperationOut(BaseModel):
     id: int
-    kind: str
+    kind: str  # contribution | purchase | transfer
     amount: int
     category: str | None
     category_title: str | None
@@ -51,14 +52,17 @@ class OperationOut(BaseModel):
     occurred_at: dt.datetime
     can_edit: bool
     shares: list[ShareOut]
+    to_user_id: int | None = None   # получатель перевода
+    to_user: str | None = None
 
 
 class OperationIn(BaseModel):
-    kind: str = Field(pattern="^(contribution|purchase)$")
+    kind: str = Field(pattern="^(contribution|purchase|transfer)$")
     amount: int = Field(gt=0, description="копейки")
     title: str | None = None
     category: str | None = None
     participant_ids: list[int] | None = None
+    to_user_id: int | None = None  # для перевода: кому вернули долг
     occurred_at: dt.datetime | None = None
 
 
@@ -78,12 +82,24 @@ class BalanceOut(BaseModel):
     balance: int
 
 
+class DebtOut(BaseModel):
+    """Один перевод из плана взаимозачёта."""
+
+    from_user_id: int
+    from_name: str
+    to_user_id: int
+    to_name: str
+    amount: int
+
+
 class SummaryOut(BaseModel):
     group: GroupOut
+    mode: str = "fund"
     fund_left: int
     total_contributed: int
     total_spent: int
     members: list[BalanceOut]
+    debts: list[DebtOut] = []
 
 
 class SliceOut(BaseModel):

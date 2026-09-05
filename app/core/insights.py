@@ -39,7 +39,18 @@ DEBT_SYSTEM = (
     "- без приветствий и без подписи."
 )
 
+DEBT_SPLIT_SYSTEM = (
+    "Ты ведёшь общий бюджет компании друзей, где расходы делят между собой. "
+    "Напиши одну короткую дружелюбную фразу-напоминание тем, кто остался "
+    "должен друзьям.\n"
+    "Правила:\n"
+    "- одна строка, тёплый тон, без упрёков и без морали;\n"
+    "- не перечисляй имена и суммы, они будут показаны отдельно;\n"
+    "- без приветствий и без подписи."
+)
+
 DEBT_FALLBACK = "Общий фонд просит пополнения — как будет удобно."
+DEBT_SPLIT_FALLBACK = "Долги сами себя не вернут — как будет удобно."
 
 
 async def spending_tip(session: AsyncSession, group: Group) -> str | None:
@@ -89,15 +100,19 @@ async def spending_tip(session: AsyncSession, group: Group) -> str | None:
     return (answer or "").strip() or None
 
 
-async def debt_note() -> str:
+async def debt_note(*, split: bool = False) -> str:
     """Дружелюбная строка перед списком должников."""
+    system = DEBT_SPLIT_SYSTEM if split else DEBT_SYSTEM
+    fallback = DEBT_SPLIT_FALLBACK if split else DEBT_FALLBACK
+    ask = "Напомни про возврат долгов." if split else "Напомни про пополнение фонда."
+
     if not settings.llm_enabled:
-        return DEBT_FALLBACK
+        return fallback
     try:
         answer = await chat(
             [
-                {"role": "system", "content": DEBT_SYSTEM},
-                {"role": "user", "content": "Напомни про пополнение фонда."},
+                {"role": "system", "content": system},
+                {"role": "user", "content": ask},
             ],
             max_tokens=80,
             temperature=0.9,
@@ -105,6 +120,6 @@ async def debt_note() -> str:
         )
     except Exception as exc:
         log.warning("Напоминание не сформулировано (%s)", exc)
-        return DEBT_FALLBACK
+        return fallback
 
-    return (answer or "").strip().split("\n")[0] or DEBT_FALLBACK
+    return (answer or "").strip().splitlines()[0] if answer else fallback

@@ -15,6 +15,8 @@ const state = {
   category: 'food',
   participants: new Set(),
   scope: 'all',
+  groupMode: 'fund',   // fund — общая касса, split — делим расходы
+  payee: null,         // кому возвращаем долг
   mode: 'categories',
   period: 'month',
   editing: null,
@@ -200,6 +202,29 @@ async function bootstrap() {
 function updateGroupName() {
   const group = state.groups.find((item) => item.id === state.groupId);
   $('group-name').textContent = group ? group.title : 'Бюджет';
+  applyMode(group ? group.mode : 'fund');
+}
+
+// Режим меняет не только подписи: в кассе есть остаток и взносы, в дележе —
+// личный баланс и возвраты долга конкретному человеку.
+function applyMode(mode) {
+  state.groupMode = mode === 'split' ? 'split' : 'fund';
+  const split = state.groupMode === 'split';
+
+  const second = $('kind-second');
+  second.dataset.kind = split ? 'transfer' : 'contribution';
+  second.querySelector('span').textContent = split ? 'Возврат' : 'Взнос';
+
+  $('fund-badge').hidden = split;
+  $('fund-meter').hidden = split;
+  $('fund-in-label').textContent = split ? 'Вы оплатили' : 'Внесено';
+  $('fund-out-label').textContent = split ? 'Ваша доля' : 'Потрачено';
+  $('debts-block').hidden = !split;
+
+  if (state.kind === (split ? 'contribution' : 'transfer')) {
+    state.kind = split ? 'transfer' : 'contribution';
+  }
+  updateKindFields();
 }
 
 async function refresh() {
@@ -212,9 +237,11 @@ async function refresh() {
   if (!state.participants.size) {
     members.forEach((member) => state.participants.add(member.id));
   }
+  renderPayees();
 
   renderFund(summary);
   renderBalances(summary);
+  renderDebts(summary);
   renderParticipants();
   await Promise.all([loadOperations(), loadStats()]);
 }
@@ -224,6 +251,20 @@ async function refresh() {
 // --------------------------------------------------------------------------- //
 
 function renderFund(summary) {
+  applyMode(summary.mode);
+
+  if (summary.mode === 'split') {
+    const me = summary.members.find((item) => item.user_id === (state.user || {}).id);
+    const balance = me ? me.balance : 0;
+    $('fund-label').textContent =
+      balance > 0 ? 'Вам должны' : balance < 0 ? 'Вы должны' : 'Все рассчитались';
+    $('fund').textContent = money(Math.abs(balance));
+    $('fund-in').textContent = money(me ? me.contributed : 0, { short: true });
+    $('fund-out').textContent = money(me ? me.spent : 0, { short: true });
+    return;
+  }
+
+  $('fund-label').textContent = 'Остаток в фонде';
   $('fund').textContent = money(summary.fund_left);
   $('fund-in').textContent = money(summary.total_contributed, { short: true });
   $('fund-out').textContent = money(summary.total_spent, { short: true });
@@ -246,11 +287,96 @@ function renderBalances(summary) {
     const top = el('div', 'balance-top');
     top.append(el('div', 'avatar', initial(item.name)), el('div', 'balance-name', item.name));
 
+    const mine = item.user_id === (state.user || {}).id;
+    let note;
+    if (item.balance === 0) {
+      note = 'в расчёте';
+    } else if (state.groupMode === 'split') {
+      note = item.balance > 0
+        ? (mine ? 'вам должны' : 'ему должны')
+        : (mine ? 'вы должны' : 'должен');
+    } else {
+      note = item.balance > 0 ? 'переплата' : 'задолженность';
+    }
+
     card.append(top);
-    card.appendChild(el('div', 'balance-note',
-      item.balance > 0 ? 'переплата' : item.balance < 0 ? 'задолженность' : 'в расчёте'));
+    card.appendChild(el('div', 'balance-note', note));
     card.appendChild(el('div', `pill-sum ${sign || 'flat'}`, signed(item.balance)));
     box.appendChild(card);
+  });
+}
+
+function renderDebts(summary) {
+  const box = $('debts');
+  box.innerHTML = '';
+  if (summary.mode !== 'split') return;
+
+  if (!summary.debts.length) {
+    box.appendChild(el('div', 'empty', 'Все рассчитались'));
+    return;
+  }
+
+  summary.debts.forEach((debt) => {
+    const row = el('div', 'debt');
+
+    const who = el('div', 'debt-who');
+    who.append(
+      el('span', 'avatar', initial(debt.from_name)),
+      el('span', 'debt-name', debt.from_name),
+      icon('i-arrow', 'ic ic-14'),
+      el('span', 'avatar', initial(debt.to_name)),
+      el('span', 'debt-name', debt.to_name),
+    );
+
+    row.append(who, el('div', 'debt-sum', money(debt.amount)));
+
+    if (debt.from_user_id === (state.user || {}).id) {
+      const pay = el('button', 'debt-pay', 'Вернуть');
+      pay.type = 'button';
+      pay.onclick = () => startRepay(debt);
+      row.appendChild(pay);
+    }
+    box.appendChild(row);
+  });
+}
+
+// Кнопка «Вернуть» открывает форму уже заполненной: сумма и получатель
+// известны из плана взаимозачёта.
+function startRepay(debt) {
+  resetForm();
+  state.kind = 'transfer';
+  state.payee = debt.to_user_id;
+  $('amount').value = (debt.amount / 100).toString().replace('.', ',');
+  $('sheet-title').textContent = 'Возврат долга';
+  updateKindFields();
+  renderPayees();
+  openSheet();
+  haptic();
+}
+
+function renderPayees() {
+  const box = $('payees');
+  box.innerHTML = '';
+
+  const others = state.members.filter((member) => member.id !== (state.user || {}).id);
+  if (state.payee && !others.some((member) => member.id === state.payee)) {
+    state.payee = null;
+  }
+  if (!others.length) {
+    box.appendChild(el('div', 'empty', 'В бюджете пока только вы'));
+    return;
+  }
+
+  others.forEach((member) => {
+    const chip = el('button', `chip${state.payee === member.id ? ' active' : ''}`);
+    chip.type = 'button';
+    chip.append(el('span', 'avatar', initial(member.name)),
+      document.createTextNode(member.name));
+    chip.onclick = () => {
+      state.payee = member.id;
+      renderPayees();
+    };
+    box.appendChild(chip);
   });
 }
 
@@ -269,23 +395,32 @@ async function loadOperations() {
 function operationRow(operation) {
   const category = state.categories.find((item) => item.code === operation.category);
   const contribution = operation.kind === 'contribution';
+  const transfer = operation.kind === 'transfer';
 
   const row = el('div', `op${contribution ? ' in' : ''}`);
 
   const badge = el('div', 'op-icon');
-  const color = contribution ? '#30d158' : category ? category.color : '#8e8d88';
+  const color = transfer ? '#1689ff'
+    : contribution ? '#30d158'
+      : category ? category.color : '#8e8d88';
   badge.style.background = tint(color, 0.18);
   badge.style.color = color;
-  badge.appendChild(icon(contribution ? 'i-wallet' : CAT_ICON[operation.category] || 'c-other'));
+  badge.appendChild(icon(
+    transfer ? 'i-arrow'
+      : contribution ? 'i-wallet'
+        : CAT_ICON[operation.category] || 'c-other',
+  ));
 
   const main = el('div', 'op-main');
-  main.appendChild(el('div', 'op-title', contribution
-    ? 'Взнос в фонд'
-    : operation.title || operation.category_title));
+  main.appendChild(el('div', 'op-title', transfer
+    ? `Возврат: ${operation.author} → ${operation.to_user || '—'}`
+    : contribution ? 'Взнос в фонд'
+      : operation.title || operation.category_title));
 
   const when = new Date(`${operation.occurred_at}Z`).toLocaleString('ru-RU',
     { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-  const people = !contribution && operation.shares.length < state.members.length
+  const people = !contribution && !transfer
+    && operation.shares.length < state.members.length
     ? ` · делят: ${operation.shares.map((share) => share.name).join(', ')}`
     : '';
   main.appendChild(el('div', 'op-meta', `${operation.author} · ${when}${people}`));
@@ -386,12 +521,15 @@ function renderParticipants() {
 
 function updateKindFields() {
   const purchase = state.kind === 'purchase';
+  const transfer = state.kind === 'transfer';
   $('purchase-fields').classList.toggle('open', purchase);
   $('purchase-details').classList.toggle('open', purchase);
+  $('payee-field').classList.toggle('open', transfer);
   $('kind-switch').dataset.active = purchase ? '0' : '1';
   $('submit').textContent = state.editing
     ? 'Сохранить изменения'
-    : purchase ? 'Записать покупку' : 'Внести в фонд';
+    : purchase ? 'Записать покупку'
+      : transfer ? 'Записать возврат' : 'Внести в фонд';
   document.querySelectorAll('#kind-switch .sw').forEach((button) =>
     button.classList.toggle('active', button.dataset.kind === state.kind));
 }
@@ -440,7 +578,10 @@ function startEdit(operation) {
   state.editing = operation.id;
   state.kind = operation.kind;
   state.category = operation.category || 'other';
-  state.participants = new Set(operation.shares.map((share) => share.user_id));
+  state.participants = operation.kind === 'transfer'
+    ? new Set(state.members.map((member) => member.id))
+    : new Set(operation.shares.map((share) => share.user_id));
+  state.payee = operation.to_user_id || null;
 
   $('amount').value = (operation.amount / 100).toString().replace('.', ',');
   $('title').value = operation.title || '';
@@ -452,6 +593,7 @@ function startEdit(operation) {
   updateKindFields();
   renderCategories();
   renderParticipants();
+  renderPayees();
   openSheet();
 }
 
@@ -463,8 +605,10 @@ function resetForm() {
   $('add-status').textContent = '';
   $('sheet-title').textContent = 'Новая операция';
   $('cancel-edit').hidden = true;
+  state.payee = null;
   state.participants = new Set(state.members.map((member) => member.id));
   renderParticipants();
+  renderPayees();
   updateKindFields();
 }
 
@@ -475,12 +619,17 @@ async function submitForm(event) {
   if (!amount) return toast('Укажите сумму');
 
   const purchase = state.kind === 'purchase';
+  const transfer = state.kind === 'transfer';
+  if (transfer && !state.payee) return toast('Выберите, кому вернули долг');
+
   const body = {
     kind: state.kind,
     amount,
     title: $('title').value.trim() || null,
     category: purchase ? state.category : null,
-    participant_ids: purchase ? [...state.participants] : null,
+    participant_ids: purchase ? [...state.participants]
+      : transfer ? [state.payee] : null,
+    to_user_id: transfer ? state.payee : null,
   };
 
   $('submit').disabled = true;
@@ -501,7 +650,8 @@ async function submitForm(event) {
         method: 'POST',
         body: JSON.stringify(body),
       });
-      toast(purchase ? 'Покупка записана' : 'Взнос записан');
+      toast(purchase ? 'Покупка записана'
+        : transfer ? 'Возврат записан' : 'Взнос записан');
     }
     haptic('medium');
     closeSheet();

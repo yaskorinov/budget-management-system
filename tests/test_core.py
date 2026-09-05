@@ -21,7 +21,7 @@ async def main():
         anya = await service.get_or_create_user(s, tg_user_id=1, first_name="Аня")
         borya = await service.get_or_create_user(s, tg_user_id=2, first_name="Боря")
         vika = await service.get_or_create_user(s, tg_user_id=3, first_name="Вика")
-        g = await service.get_or_create_group_for_chat(s, tg_chat_id=-100500, title="Квартира на Лесной")
+        g, _ = await service.get_or_create_group_for_chat(s, tg_chat_id=-100500, title="Квартира на Лесной")
         for u in (anya, borya, vika):
             await service.ensure_member(s, group_id=g.id, user_id=u.id)
 
@@ -187,4 +187,96 @@ async def main():
 
     print("\nOK: ядро работает")
 
+
+async def split_mode():
+    """Режим дележа: кто за кого платил, кто кому остался должен."""
+    async with session_scope() as s:
+        dima = await service.get_or_create_user(s, tg_user_id=11, first_name="Дима")
+        zhenya = await service.get_or_create_user(s, tg_user_id=12, first_name="Женя")
+        kostya = await service.get_or_create_user(s, tg_user_id=13, first_name="Костя")
+        g = await service.create_group(s, title="Поездка в горы", owner=dima, mode="split")
+        for u in (zhenya, kostya):
+            await service.ensure_member(s, group_id=g.id, user_id=u.id)
+        assert g.is_split
+
+        # В дележе кассы нет: взнос сюда положить нельзя.
+        try:
+            await service.add_contribution(s, group_id=g.id, author_id=dima.id, amount=1000)
+            raise AssertionError("взнос в режиме дележа должен быть отклонён")
+        except service.ServiceError:
+            pass
+
+        # Дима заплатил за всех, Женя — за себя и Костю.
+        await service.add_purchase(s, group_id=g.id, author_id=dima.id, amount=90000,
+                                   category="food", title="Продукты в дорогу")
+        await service.add_purchase(s, group_id=g.id, author_id=zhenya.id, amount=30000,
+                                   category="food", title="Кофе",
+                                   participant_ids=[zhenya.id, kostya.id])
+
+        data = await service.summary(s, group=g)
+        by_name = {m.user.short_name: m.balance for m in data.members}
+        print("дележ:", by_name)
+        assert by_name["Дима"] == 60000, by_name
+        assert by_name["Женя"] == -15000, by_name
+        assert by_name["Костя"] == -45000, by_name
+        assert sum(by_name.values()) == 0, "в дележе балансы сходятся в ноль"
+        assert data.fund_left == 0, "кассы в этом режиме нет"
+        assert data.total_spent == 120000
+
+        plan = {(d.debtor.short_name, d.creditor.short_name): d.amount for d in data.debts}
+        print("кто кому:", plan)
+        assert plan == {("Костя", "Дима"): 45000, ("Женя", "Дима"): 15000}, plan
+        assert len(data.debts) <= len(data.members) - 1, "переводов не больше, чем участников минус один"
+
+        # Костя возвращает долг — перевод гасит его баланс.
+        transfer = await service.add_transfer(s, group_id=g.id, author_id=kostya.id,
+                                              to_user_id=dima.id, amount=45000)
+        assert transfer.is_transfer and transfer.recipient.short_name == "Дима"
+
+        data = await service.summary(s, group=g)
+        by_name = {m.user.short_name: m.balance for m in data.members}
+        print("после возврата:", by_name)
+        assert by_name["Костя"] == 0 and by_name["Дима"] == 15000
+        assert sum(by_name.values()) == 0
+        assert [(d.debtor.short_name, d.creditor.short_name, d.amount) for d in data.debts] == [
+            ("Женя", "Дима", 15000)
+        ]
+        # Расходы считаем только по покупкам: возврат долга — не трата.
+        assert data.total_spent == 120000
+
+        # Себе перевести нельзя, чужому — тоже.
+        for kwargs in ({"to_user_id": kostya.id}, {"to_user_id": 999999}):
+            try:
+                await service.add_transfer(s, group_id=g.id, author_id=kostya.id,
+                                           amount=1000, **kwargs)
+                raise AssertionError(f"перевод {kwargs} должен быть отклонён")
+            except service.ServiceError:
+                pass
+
+        # Режим не переключить, пока есть операции чужого вида.
+        try:
+            await service.set_group_mode(s, group=g, mode="fund")
+            raise AssertionError("смена режима с переводами должна быть отклонена")
+        except service.ServiceError:
+            pass
+
+        # В кассе переводов не бывает.
+        fund = await service.create_group(s, title="Квартира", owner=dima)
+        assert not fund.is_split
+        await service.ensure_member(s, group_id=fund.id, user_id=zhenya.id)
+        try:
+            await service.add_transfer(s, group_id=fund.id, author_id=dima.id,
+                                       to_user_id=zhenya.id, amount=1000)
+            raise AssertionError("перевод в режиме кассы должен быть отклонён")
+        except service.ServiceError:
+            pass
+
+        # Пустой бюджет режим меняет свободно.
+        await service.set_group_mode(s, group=fund, mode="split")
+        assert fund.is_split
+
+    print("режим дележа: балансы, взаимозачёт и запреты сходятся")
+
+
 asyncio.run(main())
+asyncio.run(split_mode())

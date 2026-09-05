@@ -62,19 +62,35 @@ async def send_debts(bot: Bot, group: Group) -> bool:
         if not debtors:
             return False
 
-        note = await insights.debt_note()
-        text = texts.blocks(
-            texts.heading(2, "🔔 Общий фонд"),
-            texts.join(note),
-            texts.table(
+        note = await insights.debt_note(split=group.is_split)
+        if group.is_split:
+            body = texts.table(
+                ["Должник", "Кому", "Сколько"],
+                [
+                    [
+                        debt.debtor.short_name,
+                        debt.creditor.short_name,
+                        texts.bold(texts.money(debt.amount)),
+                    ]
+                    for debt in data.debts
+                ],
+                align="llr",
+            )
+        else:
+            body = texts.table(
                 ["Участник", "Нужно внести"],
                 [
                     [item.user.short_name, texts.bold(texts.money(-item.balance))]
                     for item in debtors
                 ],
                 align="lr",
-            ),
-            texts.italic("Пополнить: /add 5000"),
+            )
+        text = texts.blocks(
+            texts.heading(2, "🔔 Долги" if group.is_split else "🔔 Общий фонд"),
+            texts.join(note),
+            body,
+            texts.italic("Вернуть долг: /add 500" if group.is_split
+                         else "Пополнить: /add 5000"),
         )
     return await _send(bot, group.tg_chat_id, text)
 

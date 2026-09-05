@@ -34,13 +34,14 @@ def _hide_password(url: str) -> str:
 
 PRIVATE_COMMANDS = [
     BotCommand(command="start", description="Меню и балансы"),
-    BotCommand(command="add", description="Внести деньги в фонд"),
+    BotCommand(command="add", description="Внести в фонд или вернуть долг"),
     BotCommand(command="buy", description="Записать покупку"),
     BotCommand(command="balance", description="Балансы участников"),
     BotCommand(command="stats", description="Диаграмма расходов"),
     BotCommand(command="ops", description="Мои операции"),
     BotCommand(command="groups", description="Выбрать активный бюджет"),
     BotCommand(command="newgroup", description="Создать бюджет"),
+    BotCommand(command="mode", description="Режим расчётов"),
     BotCommand(command="voice", description="Записать операцию голосом"),
     BotCommand(command="web", description="Ссылка на веб-версию"),
     BotCommand(command="help", description="Как пользоваться"),
@@ -48,13 +49,14 @@ PRIVATE_COMMANDS = [
 
 GROUP_COMMANDS = [
     BotCommand(command="join", description="Присоединиться к бюджету чата"),
-    BotCommand(command="add", description="Внести деньги в фонд"),
+    BotCommand(command="add", description="Внести в фонд или вернуть долг"),
     BotCommand(command="buy", description="Записать покупку"),
     BotCommand(command="balance", description="Балансы участников"),
     BotCommand(command="stats", description="Диаграмма расходов"),
     BotCommand(command="ops", description="Последние операции"),
     BotCommand(command="voice", description="Записать операцию голосом"),
     BotCommand(command="members", description="Участники"),
+    BotCommand(command="mode", description="Режим расчётов"),
     BotCommand(command="help", description="Как пользоваться"),
 ]
 

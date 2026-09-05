@@ -76,18 +76,23 @@
         <div class="col">
           <div class="fund">
             <div class="fund-head">
-              <span class="eyebrow">Остаток в фонде</span>
-              <div class="fund-badge">
+              <span class="eyebrow" id="fund-label">Остаток в фонде</span>
+              <div class="fund-badge" id="fund-badge">
                 <b id="fund-share">0%</b>
                 <span>потрачено</span>
               </div>
             </div>
             <div class="fund-value" id="fund">—</div>
-            <div class="meter"><i id="meter-fill" style="width:0%"></i></div>
+            <div class="meter" id="fund-meter"><i id="meter-fill" style="width:0%"></i></div>
             <div class="fund-foot">
-              <div><span class="eyebrow">Внесено</span><b id="fund-in">—</b></div>
-              <div><span class="eyebrow">Потрачено</span><b id="fund-out">—</b></div>
+              <div><span class="eyebrow" id="fund-in-label">Внесено</span><b id="fund-in">—</b></div>
+              <div><span class="eyebrow" id="fund-out-label">Потрачено</span><b id="fund-out">—</b></div>
             </div>
+          </div>
+
+          <div id="debts-block" hidden>
+            <h2 class="section-title">Кто кому должен</h2>
+            <div id="debts" class="debts"></div>
           </div>
 
           <h2 class="section-title">Баланс участников</h2>
@@ -190,8 +195,8 @@
         <button type="button" class="sw active" data-kind="purchase">
           <svg class="ic ic-18"><use href="#i-cart"/></svg>Покупка
         </button>
-        <button type="button" class="sw" data-kind="contribution">
-          <svg class="ic ic-18"><use href="#i-wallet"/></svg>Взнос
+        <button type="button" class="sw" id="kind-second" data-kind="contribution">
+          <svg class="ic ic-18"><use href="#i-wallet"/></svg><span>Взнос</span>
         </button>
       </div>
 
@@ -216,6 +221,15 @@
           <span class="cur">₽</span>
         </div>
       </label>
+
+      <div id="payee-field" class="collapse">
+        <div>
+          <div class="field">
+            <span class="eyebrow">Кому вернули</span>
+            <div id="payees" class="chips"></div>
+          </div>
+        </div>
+      </div>
 
       <div id="purchase-details" class="collapse open">
         <div>

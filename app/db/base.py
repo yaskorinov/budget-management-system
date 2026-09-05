@@ -56,6 +56,22 @@ async def get_session() -> AsyncIterator[AsyncSession]:
         yield session
 
 
+# Колонки, добавленные после первого релиза: create_all дополняет только
+# отсутствующие таблицы, готовые он не трогает.
+LATE_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("groups", "mode", "VARCHAR(8) NOT NULL DEFAULT 'fund'"),
+)
+
+
+async def _add_late_columns(conn) -> None:
+    for table, column, ddl in LATE_COLUMNS:
+        rows = await conn.exec_driver_sql(f"PRAGMA table_info({table})")
+        if column not in {row[1] for row in rows}:
+            await conn.exec_driver_sql(
+                f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"
+            )
+
+
 async def init_db() -> None:
     from app.db import models  # noqa: F401  — регистрация моделей в метаданных
 
@@ -64,3 +80,5 @@ async def init_db() -> None:
             await conn.exec_driver_sql("PRAGMA journal_mode=WAL")
             await conn.exec_driver_sql("PRAGMA foreign_keys=ON")
         await conn.run_sync(Base.metadata.create_all)
+        if settings.database_url.startswith("sqlite"):
+            await _add_late_columns(conn)

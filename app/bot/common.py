@@ -62,7 +62,7 @@ async def resolve_group(
     """Группа для сообщения: чат — свой бюджет, личка — активная группа."""
     if message.chat.type in GROUP_CHATS:
         title = message.chat.title or "Общий бюджет"
-        group = await service.get_or_create_group_for_chat(
+        group, _ = await service.get_or_create_group_for_chat(
             session, tg_chat_id=message.chat.id, title=title
         )
         if join or await service.is_member(session, group_id=group.id, user_id=user.id):
@@ -297,9 +297,10 @@ async def group_for_callback(session: AsyncSession, callback: CallbackQuery, use
     """
     chat = getattr(callback.message, "chat", None)
     if chat is not None and chat.type in GROUP_CHATS:
-        return await service.get_or_create_group_for_chat(
+        group, _ = await service.get_or_create_group_for_chat(
             session, tg_chat_id=chat.id, title=chat.title or "Общий бюджет"
         )
+        return group
     return await service.resolve_active_group(session, user)
 
 

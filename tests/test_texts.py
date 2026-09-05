@@ -41,7 +41,7 @@ async def main() -> None:
         anya = await service.get_or_create_user(s, tg_user_id=1, first_name="Аня")
         borya = await service.get_or_create_user(s, tg_user_id=2, first_name=HOSTILE)
         vika = await service.get_or_create_user(s, tg_user_id=3, first_name="Вика")
-        group = await service.get_or_create_group_for_chat(
+        group, _ = await service.get_or_create_group_for_chat(
             s, tg_chat_id=-1, title="Квартира №5 (2-й) [Лесная] *звезда*"
         )
         for user in (anya, borya, vika):

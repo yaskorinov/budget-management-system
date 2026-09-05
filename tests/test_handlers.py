@@ -395,7 +395,7 @@ async def main():
     out = await send("/buy сковорода 2400", ANYA, GROUP)
     show("покупка Ани", out)
     async with session_scope() as db:
-        group = await service.get_or_create_group_for_chat(
+        group, _ = await service.get_or_create_group_for_chat(
             db, tg_chat_id=GROUP.id, title=GROUP.title)
         ops = await service.list_operations(db, group_id=group.id, limit=1)
         op_id = ops[0].id
@@ -487,7 +487,7 @@ async def main():
     session.reset()
     await dp.feed_update(bot, upd(message=msg("/buy сахар 120", ANYA, GROUP)))
     async with session_scope() as db:
-        group = await service.get_or_create_group_for_chat(
+        group, _ = await service.get_or_create_group_for_chat(
             db, tg_chat_id=GROUP.id, title=GROUP.title)
         fresh = (await service.list_operations(db, group_id=group.id, limit=1))[0].id
 

@@ -266,6 +266,8 @@ button { cursor: pointer; }
 }
 .meter i { display: block; height: 100%; border-radius: 999px; background: #fff; transition: width .4s ease; }
 .fund-foot { display: flex; gap: 24px; }
+/* В дележе полосы расхода нет — отступ под числом задаём сами. */
+.meter[hidden] + .fund-foot { margin-top: 16px; }
 .fund-foot b {
   display: block; margin-top: 3px;
   font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums;
@@ -302,6 +304,33 @@ button { cursor: pointer; }
 .pill-sum.pos { background: var(--good); color: #06240f; }
 .pill-sum.neg { background: var(--bad); }
 .pill-sum.flat { background: var(--sunk); color: var(--ink-2); }
+
+/* --------------------------------------------------- кто кому должен */
+
+/* План взаимозачёта: одна строка — один перевод, который закрывает долг. */
+.debts { display: grid; gap: 8px; }
+.debt {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--card); border-radius: var(--r-card); padding: 12px;
+}
+.debt-who {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13.5px; font-weight: 600;
+}
+.debt-who .ic { color: var(--ink-3); }
+.debt-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.debt-sum {
+  flex: none; font-size: 14px; font-weight: 700;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.debt-pay {
+  flex: none; height: 30px; padding: 0 14px;
+  border: none; border-radius: 999px;
+  background: var(--primary); color: #fff;
+  font-size: 13px; font-weight: 700;
+}
+.debt-pay:active { transform: scale(.94); }
 
 /* ------------------------------------------------------------- операции */
 

@@ -53,20 +53,25 @@ def _article(
     )
 
 
-def _hints(group_title: str) -> list[InlineQueryResultArticle]:
-    return [
+def _hints(group_title: str, *, split: bool = False) -> list[InlineQueryResultArticle]:
+    hints = [
         _article(
             result_id="hint-buy",
             title="🛒 Покупка: напишите что и сколько",
             description="например: молоко хлеб 850",
             text=texts.join("Бюджет «", group_title, "»: напишите покупку с суммой"),
         ),
-        _article(
-            result_id="hint-add",
-            title="💰 Взнос: «внёс 5000»",
-            description="пополнить общий фонд",
-            text=texts.join("Бюджет «", group_title, "»: напишите «внёс 5000»"),
-        ),
+    ]
+    if not split:
+        hints.append(
+            _article(
+                result_id="hint-add",
+                title="💰 Взнос: «внёс 5000»",
+                description="пополнить общий фонд",
+                text=texts.join("Бюджет «", group_title, "»: напишите «внёс 5000»"),
+            )
+        )
+    hints += [
         _article(
             result_id="hint-stats",
             title="📊 «стата категории» или «стата люди»",
@@ -80,6 +85,7 @@ def _hints(group_title: str) -> list[InlineQueryResultArticle]:
             text=texts.join("Бюджет «", group_title, "»: напишите «баланс»"),
         ),
     ]
+    return hints
 
 
 async def _stats_results(
@@ -197,7 +203,10 @@ async def inline_query(
 
     if not text:
         await query.answer(
-            _hints(group.title), cache_time=5, is_personal=True, button=open_bot
+            _hints(group.title, split=group.is_split),
+            cache_time=5,
+            is_personal=True,
+            button=open_bot,
         )
         return
 
@@ -213,7 +222,11 @@ async def inline_query(
                 _article(
                     result_id=f"balance-{group.id}",
                     title="💼 Балансы участников",
-                    description=f"в фонде {format_money(data.fund_left)}",
+                    description=(
+                        "кто кому сколько должен"
+                        if data.is_split
+                        else f"в фонде {format_money(data.fund_left)}"
+                    ),
                     text=texts.summary_text(data),
                 )
             ],
@@ -223,7 +236,9 @@ async def inline_query(
         )
         return
 
-    if match := CONTRIBUTION_RE.match(text):
+    # Взнос в кассу бывает только в режиме кассы: в дележе деньги отдают
+    # конкретному человеку, а получателя из inline-строки не спросишь.
+    if not group.is_split and (match := CONTRIBUTION_RE.match(text)):
         amount, _ = parse_amount(match.group("rest"))
         if amount:
             draft = drafts.put(
@@ -324,7 +339,7 @@ async def _render_committed(session: AsyncSession, operation) -> tuple[str, obje
     members = await service.group_members(session, operation.group_id)
     data = await service.summary(session, group=group)
     card = texts.operation_card(
-        operation, group=group, members_total=len(members), fund_left=data.fund_left
+        operation, group=group, members_total=len(members), data=data
     )
     return card, keyboards.operation_kb(operation, compact=True)
 

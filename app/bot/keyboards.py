@@ -12,12 +12,26 @@ from app.core import categories as cat
 from app.core import periods
 from app.db.models import Group, Operation, User
 
-from app.bot.callbacks import DraftCB, GroupCB, MenuCB, OpCB, OpsPageCB, StatsCB
+from app.bot.callbacks import (
+    DraftCB,
+    GroupCB,
+    MenuCB,
+    ModeCB,
+    OpCB,
+    OpsPageCB,
+    PayCB,
+    StatsCB,
+)
 
 
-def main_menu(*, web_app_url: str | None = None) -> InlineKeyboardMarkup:
+def main_menu(
+    *, web_app_url: str | None = None, split: bool = False
+) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="💰 Внести в фонд", callback_data=MenuCB(action="add"))
+    builder.button(
+        text="💸 Вернуть долг" if split else "💰 Внести в фонд",
+        callback_data=MenuCB(action="add"),
+    )
     builder.button(text="🛒 Записать покупку", callback_data=MenuCB(action="buy"))
     builder.button(text="📊 Статистика", callback_data=MenuCB(action="stats"))
     builder.button(text="📒 Операции", callback_data=MenuCB(action="ops"))
@@ -26,6 +40,34 @@ def main_menu(*, web_app_url: str | None = None) -> InlineKeyboardMarkup:
     if web_app_url:
         builder.button(text="🌐 Открыть приложение", web_app=WebAppInfo(url=web_app_url))
     builder.adjust(2, 2, 2, 1)
+    return builder.as_markup()
+
+
+def mode_kb(group_id: int) -> InlineKeyboardMarkup:
+    """Выбор режима: как считать деньги в этом бюджете."""
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="🏦 Общая касса", callback_data=ModeCB(group_id=group_id, mode="fund")
+    )
+    builder.button(
+        text="🧮 Делим расходы", callback_data=ModeCB(group_id=group_id, mode="split")
+    )
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def payees_kb(members: list[User], *, amount: int, exclude_id: int) -> InlineKeyboardMarkup:
+    """Кому вернуть долг. Себя в списке нет — перевод себе ничего не меняет."""
+    builder = InlineKeyboardBuilder()
+    for member in members:
+        if member.id == exclude_id:
+            continue
+        builder.button(
+            text=member.short_name,
+            callback_data=PayCB(to_id=member.id, amount=amount),
+        )
+    builder.button(text="✖️ Отмена", callback_data=MenuCB(action="cancel"))
+    builder.adjust(2)
     return builder.as_markup()
 
 

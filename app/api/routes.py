@@ -22,11 +22,14 @@ def _user_out(user: User) -> schemas.UserOut:
 
 
 def _group_out(group: Group) -> schemas.GroupOut:
-    return schemas.GroupOut(id=group.id, title=group.title, currency=group.currency)
+    return schemas.GroupOut(
+        id=group.id, title=group.title, currency=group.currency, mode=group.mode
+    )
 
 
 def _operation_out(operation: Operation, viewer: User, can_edit: bool) -> schemas.OperationOut:
     category = cat.get(operation.category) if operation.is_purchase else None
+    recipient = operation.recipient
     return schemas.OperationOut(
         id=operation.id,
         kind=operation.kind,
@@ -44,6 +47,8 @@ def _operation_out(operation: Operation, viewer: User, can_edit: bool) -> schema
             )
             for share in operation.shares
         ],
+        to_user_id=recipient.id if recipient else None,
+        to_user=recipient.short_name if recipient else None,
     )
 
 
@@ -145,6 +150,7 @@ async def group_summary(
     data = await service.summary(session, group=group)
     return schemas.SummaryOut(
         group=_group_out(group),
+        mode=group.mode,
         fund_left=data.fund_left,
         total_contributed=data.total_contributed,
         total_spent=data.total_spent,
@@ -157,6 +163,16 @@ async def group_summary(
                 balance=item.balance,
             )
             for item in data.members
+        ],
+        debts=[
+            schemas.DebtOut(
+                from_user_id=debt.debtor.id,
+                from_name=debt.debtor.short_name,
+                to_user_id=debt.creditor.id,
+                to_name=debt.creditor.short_name,
+                amount=debt.amount,
+            )
+            for debt in data.debts
         ],
     )
 
@@ -213,7 +229,22 @@ async def create_operation(
 ):
     await _group_for(session, user, group_id)
     try:
-        if payload.kind == "contribution":
+        if payload.kind == "transfer":
+            if not payload.to_user_id:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST, "Не указан получатель перевода"
+                )
+            operation = await service.add_transfer(
+                session,
+                group_id=group_id,
+                author_id=user.id,
+                to_user_id=payload.to_user_id,
+                amount=payload.amount,
+                source="web",
+                occurred_at=payload.occurred_at,
+                comment=payload.title,
+            )
+        elif payload.kind == "contribution":
             operation = await service.add_contribution(
                 session,
                 group_id=group_id,

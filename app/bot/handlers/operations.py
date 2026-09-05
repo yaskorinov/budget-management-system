@@ -413,7 +413,10 @@ async def op_delete(
                 "🗑 ", texts.code("#" + str(operation.id)), " на ",
                 texts.money(operation.amount), " удалена",
             ),
-            texts.join("💼 В фонде: ", texts.bold(texts.money(data.fund_left))),
+            texts.join("🧮 Непогашено: ", texts.bold(texts.money(
+                sum(item.balance for item in data.members if item.balance > 0))))
+            if data.is_split
+            else texts.join("💼 В фонде: ", texts.bold(texts.money(data.fund_left))),
         ),
         keyboards.back_home_kb() if is_private(callback) else None,
     )

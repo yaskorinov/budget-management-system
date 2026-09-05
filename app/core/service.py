@@ -13,7 +13,11 @@ from app.core.money import split_amount
 from app.db.base import utcnow
 from app.db.models import (
     CONTRIBUTION,
+    FUND,
+    MODES,
     PURCHASE,
+    SPLIT,
+    TRANSFER,
     DailyJob,
     Group,
     Membership,
@@ -72,20 +76,33 @@ async def get_user(session: AsyncSession, user_id: int) -> User | None:
 
 
 async def get_or_create_group_for_chat(
-    session: AsyncSession, *, tg_chat_id: int, title: str
-) -> Group:
+    session: AsyncSession, *, tg_chat_id: int, title: str, mode: str = FUND
+) -> tuple[Group, bool]:
+    """Бюджет чата и признак того, что он только что создан.
+
+    Признак нужен вызывающему: у нового бюджета стоит спросить режим расчётов,
+    у существующего — молчать.
+    """
     group = await session.scalar(select(Group).where(Group.tg_chat_id == tg_chat_id))
-    if group is None:
-        group = Group(tg_chat_id=tg_chat_id, title=title[:255] or "Общий бюджет")
-        session.add(group)
-        await session.flush()
-    elif title and group.title != title[:255]:
-        group.title = title[:255]
-    return group
+    if group is not None:
+        if title and group.title != title[:255]:
+            group.title = title[:255]
+        return group, False
+
+    group = Group(
+        tg_chat_id=tg_chat_id,
+        title=title[:255] or "Общий бюджет",
+        mode=mode if mode in MODES else FUND,
+    )
+    session.add(group)
+    await session.flush()
+    return group, True
 
 
-async def create_group(session: AsyncSession, *, title: str, owner: User) -> Group:
-    group = Group(title=(title or "Общий бюджет")[:255])
+async def create_group(
+    session: AsyncSession, *, title: str, owner: User, mode: str = FUND
+) -> Group:
+    group = Group(title=(title or "Общий бюджет")[:255], mode=mode if mode in MODES else FUND)
     session.add(group)
     await session.flush()
     await ensure_member(session, group_id=group.id, user_id=owner.id, is_admin=True)
@@ -93,6 +110,60 @@ async def create_group(session: AsyncSession, *, title: str, owner: User) -> Gro
         owner.active_group_id = group.id
     await session.flush()
     return group
+
+
+async def set_group_mode(session: AsyncSession, *, group: Group, mode: str) -> Group:
+    """Меняет режим расчётов.
+
+    Операции чужого режима не переносим: взносы в кассу и переводы долга
+    считаются по-разному, и молча пересчитать историю нельзя.
+    """
+    if mode not in MODES:
+        raise ServiceError("Неизвестный режим бюджета")
+    if mode == group.mode:
+        return group
+
+    stale = CONTRIBUTION if mode == SPLIT else TRANSFER
+    left = await session.scalar(
+        select(func.count())
+        .select_from(Operation)
+        .where(
+            Operation.group_id == group.id,
+            Operation.kind == stale,
+            Operation.deleted_at.is_(None),
+        )
+    )
+    if left:
+        raise ServiceError(
+            "В бюджете есть операции, которых в новом режиме не бывает. "
+            "Удалите их или заведите отдельный бюджет"
+        )
+
+    group.mode = mode
+    await session.flush()
+    return group
+
+
+async def can_set_mode(session: AsyncSession, *, group: Group, user_id: int) -> bool:
+    """Режим меняет админ бюджета. Пока не записано ни одной операции — любой
+    участник: сразу после создания админа может ещё не быть."""
+    membership = await session.scalar(
+        select(Membership).where(
+            Membership.group_id == group.id,
+            Membership.user_id == user_id,
+            Membership.is_active.is_(True),
+        )
+    )
+    if membership is None:
+        return False
+    if membership.is_admin:
+        return True
+    used = await session.scalar(
+        select(func.count())
+        .select_from(Operation)
+        .where(Operation.group_id == group.id, Operation.deleted_at.is_(None))
+    )
+    return not used
 
 
 async def ensure_member(
@@ -260,6 +331,10 @@ async def add_contribution(
     if amount <= 0:
         raise ServiceError("Сумма должна быть больше нуля")
 
+    group = await session.get(Group, group_id)
+    if group is not None and group.is_split:
+        raise ServiceError("Здесь нет общей кассы: долг возвращают переводом")
+
     author = await session.get(User, author_id)
     if author is None:
         raise ServiceError("Автор операции не найден")
@@ -278,6 +353,52 @@ async def add_contribution(
     # У взноса долей нет — инициализируем коллекцию, иначе обращение к ней
     # приведёт к ленивой загрузке (в async-режиме это ошибка).
     set_committed_value(operation, "shares", [])
+    return operation
+
+
+async def add_transfer(
+    session: AsyncSession,
+    *,
+    group_id: int,
+    author_id: int,
+    to_user_id: int,
+    amount: int,
+    source: str = "dm",
+    occurred_at: dt.datetime | None = None,
+    comment: str | None = None,
+) -> Operation:
+    """Возврат долга: автор отдал деньги, получатель их принял.
+
+    Хранится как операция с единственной долей на получателя — тогда балансы
+    считаются той же формулой, что и по покупкам.
+    """
+    if amount <= 0:
+        raise ServiceError("Сумма должна быть больше нуля")
+    if to_user_id == author_id:
+        raise ServiceError("Перевод самому себе ничего не меняет")
+
+    group = await session.get(Group, group_id)
+    if group is not None and not group.is_split:
+        raise ServiceError("Здесь общая касса: деньги вносят в фонд, а не переводом")
+
+    author = await session.get(User, author_id)
+    if author is None:
+        raise ServiceError("Автор операции не найден")
+    if not await is_member(session, group_id=group_id, user_id=to_user_id):
+        raise ServiceError("Получатель не участвует в этом бюджете")
+
+    operation = Operation(
+        group_id=group_id,
+        author=author,
+        kind=TRANSFER,
+        amount=amount,
+        title=(comment or None),
+        source=source,
+        occurred_at=occurred_at or utcnow(),
+    )
+    session.add(operation)
+    await session.flush()
+    await _set_shares(session, operation, [to_user_id])
     return operation
 
 
@@ -355,7 +476,9 @@ async def edit_operation(
 
     await session.flush()
 
-    if operation.is_purchase and (participant_ids is not None or amount is not None):
+    if (operation.is_purchase or operation.is_transfer) and (
+        participant_ids is not None or amount is not None
+    ):
         ids = participant_ids or [share.user_id for share in operation.shares]
         await _set_shares(session, operation, ids)
 
@@ -438,14 +561,64 @@ async def count_operations(
 
 @dataclass(slots=True)
 class MemberBalance:
+    """Сколько человек внёс и сколько с него причитается.
+
+    В общей кассе «внёс» — это пополнения фонда, а «доля» — часть покупок.
+    В режиме дележа «внёс» — всё, что человек оплатил из своего кармана
+    (покупки и возвраты долга), а «доля» — его часть покупок плюс полученные
+    возвраты. Знак баланса в обоих режимах означает одно и то же.
+    """
+
     user: User
     contributed: int = 0
     spent: int = 0
 
     @property
     def balance(self) -> int:
-        """Больше нуля — есть запас в фонде; меньше — нужно доложить."""
+        """Больше нуля — переплатил; меньше — за ним долг."""
         return self.contributed - self.spent
+
+
+@dataclass(slots=True)
+class Debt:
+    """Один перевод из плана взаимозачёта: должник → кредитор."""
+
+    debtor: User
+    creditor: User
+    amount: int
+
+
+def simplify_debts(balances: list[MemberBalance]) -> list[Debt]:
+    """Кто кому сколько должен — минимальным числом переводов.
+
+    Жадный зачёт: самый крупный должник гасит долг самому крупному кредитору,
+    потом остаток переходит дальше. Переводов выходит не больше, чем
+    участников минус один, — платить каждому за каждую покупку не нужно.
+    """
+    debtors = sorted(
+        ([item.user, -item.balance] for item in balances if item.balance < 0),
+        key=lambda item: (-item[1], item[0].display_name),
+    )
+    creditors = sorted(
+        ([item.user, item.balance] for item in balances if item.balance > 0),
+        key=lambda item: (-item[1], item[0].display_name),
+    )
+
+    debts: list[Debt] = []
+    i = j = 0
+    while i < len(debtors) and j < len(creditors):
+        amount = min(debtors[i][1], creditors[j][1])
+        if amount > 0:
+            debts.append(
+                Debt(debtor=debtors[i][0], creditor=creditors[j][0], amount=amount)
+            )
+        debtors[i][1] -= amount
+        creditors[j][1] -= amount
+        if debtors[i][1] == 0:
+            i += 1
+        if creditors[j][1] == 0:
+            j += 1
+    return debts
 
 
 @dataclass(slots=True)
@@ -455,10 +628,26 @@ class GroupSummary:
     total_contributed: int = 0
     total_spent: int = 0
     members: list[MemberBalance] = field(default_factory=list)
+    debts: list[Debt] = field(default_factory=list)
+
+    @property
+    def mode(self) -> str:
+        return self.group.mode
+
+    @property
+    def is_split(self) -> bool:
+        return self.group.is_split
 
     @property
     def fund_left(self) -> int:
-        return self.total_contributed - self.total_spent
+        """Остаток кассы. В режиме дележа кассы нет — там всегда ноль."""
+        return 0 if self.is_split else self.total_contributed - self.total_spent
+
+    def balance_of(self, user_id: int) -> int:
+        for item in self.members:
+            if item.user.id == user_id:
+                return item.balance
+        return 0
 
 
 async def summary(
@@ -469,10 +658,16 @@ async def summary(
     until: dt.datetime | None = None,
     period_title: str = "всё время",
 ) -> GroupSummary:
-    contributions_stmt = _period_filter(
+    split = group.is_split
+    # Кто сколько выложил и кому сколько причитается — набор видов операций
+    # разный, а формула одна.
+    paid_kinds = (PURCHASE, TRANSFER) if split else (CONTRIBUTION,)
+    share_kinds = (PURCHASE, TRANSFER) if split else (PURCHASE,)
+
+    paid_stmt = _period_filter(
         select(Operation.author_id, func.sum(Operation.amount)).where(
             Operation.group_id == group.id,
-            Operation.kind == CONTRIBUTION,
+            Operation.kind.in_(paid_kinds),
             Operation.deleted_at.is_(None),
         ),
         since,
@@ -484,17 +679,26 @@ async def summary(
         .join(Operation, Operation.id == OperationShare.operation_id)
         .where(
             Operation.group_id == group.id,
-            Operation.kind == PURCHASE,
+            Operation.kind.in_(share_kinds),
             Operation.deleted_at.is_(None),
         ),
         since,
         until,
     ).group_by(OperationShare.user_id)
 
-    contributed = {
-        uid: int(total) for uid, total in await session.execute(contributions_stmt)
-    }
+    spent_stmt = _period_filter(
+        select(func.sum(Operation.amount)).where(
+            Operation.group_id == group.id,
+            Operation.kind == PURCHASE,
+            Operation.deleted_at.is_(None),
+        ),
+        since,
+        until,
+    )
+
+    contributed = {uid: int(total) for uid, total in await session.execute(paid_stmt)}
     spent = {uid: int(total) for uid, total in await session.execute(shares_stmt)}
+    total_spent = int(await session.scalar(spent_stmt) or 0)
 
     members = await group_members(session, group.id)
     known = {user.id: user for user in members}
@@ -516,9 +720,10 @@ async def summary(
     return GroupSummary(
         group=group,
         period_title=period_title,
-        total_contributed=sum(contributed.values()),
-        total_spent=sum(spent.values()),
+        total_contributed=0 if split else sum(contributed.values()),
+        total_spent=total_spent,
         members=balances,
+        debts=simplify_debts(balances) if split else [],
     )
 
 

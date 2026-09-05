@@ -14,7 +14,7 @@ from aiogram.types import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards, texts
-from app.bot.callbacks import GroupCB, MenuCB
+from app.bot.callbacks import GroupCB, MenuCB, ModeCB
 from app.bot.states import NewGroup
 from app.bot.common import (
     GROUP_CHATS,
@@ -27,7 +27,7 @@ from app.bot.common import (
 )
 from app.config import settings
 from app.core import service
-from app.db.models import User
+from app.db.models import Group, User
 
 router = Router(name="menu")
 
@@ -51,13 +51,15 @@ async def render_home(
     )
     if len(groups) > 1:
         text = texts.blocks(text, texts.italic("Сменить бюджет: /groups"))
-    return text, keyboards.main_menu(web_app_url=web_app_url() if private else None)
+    return text, keyboards.main_menu(
+        web_app_url=web_app_url() if private else None, split=group.is_split
+    )
 
 
 @router.message(CommandStart(), F.chat.type.in_(GROUP_CHATS))
 @router.message(Command("join"), F.chat.type.in_(GROUP_CHATS))
 async def join_group_chat(message: Message, session: AsyncSession, user: User) -> None:
-    existing = await service.get_or_create_group_for_chat(
+    existing, fresh = await service.get_or_create_group_for_chat(
         session, tg_chat_id=message.chat.id, title=message.chat.title or "Общий бюджет"
     )
     was_member = await service.is_member(
@@ -89,13 +91,22 @@ async def join_group_chat(message: Message, session: AsyncSession, user: User) -
             texts.join("👥 Участники (", str(len(members)), "): ", names),
             texts.bold("Дальше"),
             texts.bullets(
-                texts.join(texts.cmd("/add 5000"), " — взнос в фонд"),
+                texts.join(
+                    texts.cmd("/add 5000"),
+                    " — вернуть долг" if group.is_split else " — взнос в фонд",
+                ),
                 texts.join(texts.cmd("/buy молоко хлеб 850"), " — покупка"),
                 texts.join(texts.cmd("/join"), " — остальным, чтобы попасть в расчёты"),
                 texts.join(texts.cmd("/help"), " — всё остальное"),
             ),
         ),
     )
+
+    # Бюджет чата только что появился — сразу спрашиваем, как считать деньги.
+    if fresh:
+        await answer_rich(
+            message, texts.mode_prompt(group), reply_markup=keyboards.mode_kb(group.id)
+        )
 
 
 @router.message(CommandStart())
@@ -116,22 +127,13 @@ async def start_private(
 
 
 @router.message(Command("help"))
-async def help_command(message: Message, bot: Bot) -> None:
+async def help_command(
+    message: Message, bot: Bot, session: AsyncSession, user: User
+) -> None:
     me = await bot.me()
-    await answer_rich(message, texts.help_text(me.username))
-
-
-def group_created_text(group) -> object:
-    """Одно сообщение об успехе — и для команды, и для кнопки."""
-    return texts.blocks(
-        texts.heading(2, texts.join("✅ Бюджет «", group.title, "» создан")),
-        texts.bullets(
-            texts.join(
-                "Чтобы подключить остальных, добавьте бота в общий чат и отправьте там ",
-                texts.cmd("/join"),
-            ),
-            "Бюджет уже выбран активным",
-        ),
+    group = await resolve_group(session, message, user)
+    await answer_rich(
+        message, texts.help_text(me.username, split=bool(group and group.is_split))
     )
 
 
@@ -161,7 +163,9 @@ async def new_group(
 
     group = await service.create_group(session, title=title, owner=user)
     await service.set_active_group(session, user, group.id)
-    await answer_rich(message, group_created_text(group))
+    await answer_rich(
+        message, texts.mode_prompt(group), reply_markup=keyboards.mode_kb(group.id)
+    )
 
 
 @router.message(Command("groups"), F.chat.type == "private")
@@ -192,6 +196,66 @@ async def pick_group(
     await callback.answer(f"Активная группа: {group.title}")
     text, markup = await render_home(session, user)
     await edit_card(bot, callback, text, markup)
+
+
+MODE_ALIASES = {
+    "касса": "fund", "фонд": "fund", "fund": "fund", "общая": "fund",
+    "делим": "split", "сплит": "split", "split": "split", "splitwise": "split",
+}
+
+
+@router.callback_query(ModeCB.filter())
+async def pick_mode(
+    callback: CallbackQuery,
+    callback_data: ModeCB,
+    session: AsyncSession,
+    user: User,
+    bot: Bot,
+) -> None:
+    group = await session.get(Group, callback_data.group_id)
+    if group is None:
+        await callback.answer("Бюджет не найден", show_alert=True)
+        return
+    if not await service.can_set_mode(session, group=group, user_id=user.id):
+        await callback.answer("Режим меняет админ бюджета", show_alert=True)
+        return
+
+    try:
+        await service.set_group_mode(session, group=group, mode=callback_data.mode)
+    except service.ServiceError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+
+    await callback.answer(texts.MODE_TITLES[group.mode])
+    await edit_card(bot, callback, texts.mode_card(group), None)
+
+
+@router.message(Command("mode"))
+async def mode_command(
+    message: Message, command: CommandObject, session: AsyncSession, user: User
+) -> None:
+    group = await resolve_group(session, message, user)
+    if group is None:
+        await answer_rich(message, NO_GROUP_HINT)
+        return
+
+    wanted = MODE_ALIASES.get((command.args or "").strip().lower())
+    if wanted is None:
+        # Без аргумента показываем текущий режим и кнопки для смены.
+        await answer_rich(
+            message, texts.mode_card(group), reply_markup=keyboards.mode_kb(group.id)
+        )
+        return
+
+    if not await service.can_set_mode(session, group=group, user_id=user.id):
+        await answer_rich(message, texts.join("⚠️ Режим меняет админ бюджета"))
+        return
+    try:
+        await service.set_group_mode(session, group=group, mode=wanted)
+    except service.ServiceError as exc:
+        await answer_rich(message, texts.join("⚠️ ", str(exc)))
+        return
+    await answer_rich(message, texts.mode_card(group))
 
 
 @router.message(Command("members"))
@@ -360,10 +424,9 @@ async def create_group_by_title(
     await state.clear()
     group = await service.create_group(session, title=title, owner=user)
     await service.set_active_group(session, user, group.id)
-    await answer_rich(message, group_created_text(group))
-
-    text, markup = await render_home(session, user)
-    await answer_rich(message, text, reply_markup=markup)
+    await answer_rich(
+        message, texts.mode_prompt(group), reply_markup=keyboards.mode_kb(group.id)
+    )
 
 
 @router.callback_query(MenuCB.filter(F.action == "help"))
@@ -374,7 +437,13 @@ async def menu_help(
     # Пока бюджета нет, «В меню» вести некуда — оставляем кнопку создания.
     has_groups = bool(await service.user_groups(session, user.id))
     markup = keyboards.back_home_kb() if has_groups else keyboards.no_group_kb()
-    await edit_card(bot, callback, texts.help_text(me.username), markup)
+    active = await service.resolve_active_group(session, user)
+    await edit_card(
+        bot,
+        callback,
+        texts.help_text(me.username, split=bool(active and active.is_split)),
+        markup,
+    )
     await callback.answer()
 
 

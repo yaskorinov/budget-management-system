@@ -11,13 +11,14 @@ from aiogram.types import CallbackQuery, ForceReply, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards, texts
-from app.bot.callbacks import MenuCB
+from app.bot.callbacks import MenuCB, PayCB
 from app.bot.common import (
     GROUP_CHATS,
     NO_GROUP_HINT,
     answer_rich,
     drop_prompt,
     edit_card,
+    group_for_callback,
     resolve_group,
 )
 from app.bot.filters import PromptReply
@@ -81,6 +82,32 @@ async def ask_for_input(
     await state.set_data({"prompt_id": prompt.message_id, "prompt_chat_id": prompt.chat.id})
 
 
+async def ask_payee(
+    message: Message, session: AsyncSession, user: User, group: Group, amount: int
+) -> None:
+    """В режиме дележа деньги отдают не в кассу, а конкретному человеку."""
+    members = await service.group_members(session, group.id)
+    if len(members) < 2:
+        await answer_rich(
+            message,
+            texts.join(
+                "Пока вы в бюджете один — возвращать долг некому. Позовите остальных: ",
+                texts.cmd("/join"),
+            ),
+        )
+        return
+
+    await answer_rich(
+        message,
+        texts.blocks(
+            texts.heading(3, texts.join("💸 Возврат долга — ",
+                                        texts.bold(texts.money(amount)))),
+            texts.join("Кому вы отдали деньги?"),
+        ),
+        reply_markup=keyboards.payees_kb(members, amount=amount, exclude_id=user.id),
+    )
+
+
 async def record_contribution(
     message: Message,
     session: AsyncSession,
@@ -89,6 +116,10 @@ async def record_contribution(
     amount: int,
     source: str,
 ) -> None:
+    if group.is_split:
+        await ask_payee(message, session, user, group, amount)
+        return
+
     operation = await service.add_contribution(
         session, group_id=group.id, author_id=user.id, amount=amount, source=source
     )
@@ -96,9 +127,47 @@ async def record_contribution(
     await answer_rich(
         message,
         texts.operation_card(
-            operation, group=card_group(message, group), fund_left=data.fund_left
+            operation, group=card_group(message, group), data=data
         ),
         reply_markup=keyboards.operation_kb(operation, compact=True),
+        gif="topup",
+    )
+
+
+@router.callback_query(PayCB.filter())
+async def pay_debt(
+    callback: CallbackQuery,
+    callback_data: PayCB,
+    session: AsyncSession,
+    user: User,
+    bot: Bot,
+) -> None:
+    """Выбран получатель возврата — записываем перевод."""
+    group = await group_for_callback(session, callback, user)
+    if group is None:
+        await callback.answer("Сначала выберите бюджет", show_alert=True)
+        return
+
+    try:
+        operation = await service.add_transfer(
+            session,
+            group_id=group.id,
+            author_id=user.id,
+            to_user_id=callback_data.to_id,
+            amount=callback_data.amount,
+            source="dm" if callback.message.chat.type == "private" else "group",
+        )
+    except service.ServiceError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+
+    data = await service.summary(session, group=group)
+    await callback.answer("Записал")
+    await edit_card(
+        bot,
+        callback,
+        texts.operation_card(operation, data=data),
+        keyboards.operation_kb(operation, compact=True),
         gif="topup",
     )
 
@@ -140,7 +209,7 @@ async def record_purchase(
             operation,
             group=card_group(message, group),
             members_total=len(members),
-            fund_left=data.fund_left,
+            data=data,
         ),
         reply_markup=keyboards.operation_kb(operation, compact=True),
         gif="buy",

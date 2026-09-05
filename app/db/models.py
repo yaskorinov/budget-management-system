@@ -19,6 +19,12 @@ from app.db.base import Base, utcnow
 
 CONTRIBUTION = "contribution"
 PURCHASE = "purchase"
+TRANSFER = "transfer"
+
+# Режим расчётов в группе.
+FUND = "fund"    # общая касса: скидываемся в фонд, покупки тратят его
+SPLIT = "split"  # делим расходы: платит кто-то один, остальные ему должны
+MODES = (FUND, SPLIT)
 
 
 class Group(Base):
@@ -30,11 +36,16 @@ class Group(Base):
     tg_chat_id: Mapped[int | None] = mapped_column(BigInteger, unique=True, index=True)
     title: Mapped[str] = mapped_column(String(255), default="Общий бюджет")
     currency: Mapped[str] = mapped_column(String(8), default="RUB")
+    mode: Mapped[str] = mapped_column(String(8), default=FUND, server_default=FUND)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
 
     memberships: Mapped[list["Membership"]] = relationship(
         back_populates="group", cascade="all, delete-orphan", lazy="selectin"
     )
+
+    @property
+    def is_split(self) -> bool:
+        return self.mode == SPLIT
 
 
 class User(Base):
@@ -76,7 +87,11 @@ class Membership(Base):
 
 
 class Operation(Base):
-    """Взнос в фонд (contribution) или покупка из фонда (purchase).
+    """Взнос в фонд, покупка или перевод долга между участниками.
+
+    Перевод (transfer) живёт только в режиме дележа: автор — кто отдал деньги,
+    единственная доля — кто их получил. Так возврат долга считается той же
+    формулой, что и покупка, отдельной таблицы не нужно.
 
     Суммы хранятся в копейках, чтобы не терять точность на делении долей.
     """
@@ -113,6 +128,15 @@ class Operation(Base):
     @property
     def is_purchase(self) -> bool:
         return self.kind == PURCHASE
+
+    @property
+    def is_transfer(self) -> bool:
+        return self.kind == TRANSFER
+
+    @property
+    def recipient(self) -> User | None:
+        """Получатель перевода — единственная доля операции."""
+        return self.shares[0].user if self.is_transfer and self.shares else None
 
 
 class OperationShare(Base):

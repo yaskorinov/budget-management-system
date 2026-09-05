@@ -60,6 +60,7 @@ def operation_card(
     header: Rich | None = None,
     members_total: int | None = None,
     fund_left: int | None = None,
+    data: GroupSummary | None = None,
 ) -> Rich:
     """Карточка операции: заголовок с суммой, подробности — списком."""
     facts: list[Rich] = []
@@ -87,6 +88,17 @@ def operation_card(
                 facts.append(
                     join("👥 Поровну на ", str(parts), " — по ", bold(per_person))
                 )
+    elif operation.is_transfer:
+        recipient = operation.recipient
+        title = join("💸 Возврат долга — ", bold(money(operation.amount)))
+        facts.append(
+            join(
+                "➡️ ", operation.author.short_name, " → ",
+                recipient.short_name if recipient else "—",
+            )
+        )
+        if operation.title:
+            facts.append(join("📝 ", operation.title))
     else:
         title = join("💰 Взнос в фонд — ", bold(money(operation.amount)))
         if operation.title:
@@ -102,9 +114,22 @@ def operation_card(
     )
 
     parts: list[Rich] = [header or heading(3, title), bullets(*facts)]
-    if fund_left is not None:
-        parts.append(quote(join("💼 В фонде: ", bold(money(fund_left)))))
+    footer = _state_line(data, fund_left)
+    if footer is not None:
+        parts.append(quote(footer))
     return blocks(*parts)
+
+
+def _state_line(data: GroupSummary | None, fund_left: int | None) -> Rich | None:
+    """Подпись под карточкой: в кассе — остаток, при дележе — сумма долгов."""
+    if data is not None:
+        if data.is_split:
+            owed = sum(item.balance for item in data.members if item.balance > 0)
+            return join("🧮 Непогашено: ", bold(money(owed)))
+        return join("💼 В фонде: ", bold(money(data.fund_left)))
+    if fund_left is not None:
+        return join("💼 В фонде: ", bold(money(fund_left)))
+    return None
 
 
 def draft_card(
@@ -149,15 +174,24 @@ def summary_text(
     if with_header:
         parts.append(heading(2, join("💼 ", data.group.title)))
 
-    parts.append(
-        lines(
-            join("Осталось в фонде: ", bold(money(data.fund_left))),
-            italic(
-                "внесено ", money(data.total_contributed),
-                " · потрачено ", money(data.total_spent),
-            ),
+    if data.is_split:
+        owed = sum(item.balance for item in data.members if item.balance > 0)
+        parts.append(
+            lines(
+                join("Непогашенных долгов: ", bold(money(owed))),
+                italic("расходы за всё время — ", money(data.total_spent)),
+            )
         )
-    )
+    else:
+        parts.append(
+            lines(
+                join("Осталось в фонде: ", bold(money(data.fund_left))),
+                italic(
+                    "внесено ", money(data.total_contributed),
+                    " · потрачено ", money(data.total_spent),
+                ),
+            )
+        )
 
     if not data.members:
         parts.append(italic("Пока нет ни одной операции"))
@@ -175,21 +209,46 @@ def summary_text(
             ]
         )
     parts.append(heading(3, "Балансы"))
-    parts.append(table(["Участник", "Баланс", "Вклад", "Доля"], rows, align="lrrr"))
+    parts.append(
+        table(
+            ["Участник", "Баланс", "Оплатил", "Доля"]
+            if data.is_split
+            else ["Участник", "Баланс", "Вклад", "Доля"],
+            rows,
+            align="lrrr",
+        )
+    )
 
-    debtors = [item for item in data.members if item.balance < 0] if with_debts else []
-    if debtors:
+    if with_debts and data.is_split and data.debts:
+        # План взаимозачёта: платить каждому за каждую покупку не нужно.
         parts.append(
             blocks(
-                bold("🔴 Нужно внести"),
+                bold("🔴 Кто кому должен"),
                 bullets(
                     *[
-                        join(item.user.short_name, " — ", bold(money(-item.balance)))
-                        for item in debtors
+                        join(
+                            debt.debtor.short_name, " → ", debt.creditor.short_name,
+                            " — ", bold(money(debt.amount)),
+                        )
+                        for debt in data.debts
                     ]
                 ),
             )
         )
+    elif with_debts and not data.is_split:
+        debtors = [item for item in data.members if item.balance < 0]
+        if debtors:
+            parts.append(
+                blocks(
+                    bold("🔴 Нужно внести"),
+                    bullets(
+                        *[
+                            join(item.user.short_name, " — ", bold(money(-item.balance)))
+                            for item in debtors
+                        ]
+                    ),
+                )
+            )
 
     return blocks(*parts)
 
@@ -268,43 +327,94 @@ def stats_caption_plain(*, group_title: str, mode: str, period_title: str, total
     )
 
 
-def help_text(bot_username: str | None = None) -> Rich:
-    mention = f"@{bot_username}" if bot_username else "@бот"
-    parts: list[Rich] = [
-        heading(1, "💼 Общий бюджет"),
-        join(
-            "Все скидываются в общий фонд, покупки списываются из него. "
-            "Баланс каждого — сколько внёс минус его доля расходов."
+MODE_TITLES = {"fund": "🏦 Общая касса", "split": "🧮 Делим расходы"}
+
+MODE_ABOUT = {
+    "fund": "Все скидываются в общий фонд, покупки списываются из него. "
+            "Баланс каждого — сколько внёс минус его доля расходов.",
+    "split": "Общей кассы нет: за покупку платит кто-то один, остальные "
+             "становятся ему должны. Баланс каждого — сколько он заплатил "
+             "минус его доля. Бот сводит долги и показывает, кто кому "
+             "сколько должен отдать.",
+}
+
+
+def mode_prompt(group: Group) -> Rich:
+    """Вопрос сразу после создания бюджета: как считать деньги."""
+    return blocks(
+        heading(2, join("✅ Бюджет «", group.title, "» создан")),
+        join("Как считаем деньги?"),
+        bullets(
+            join(bold(MODE_TITLES["fund"]), " — ", MODE_ABOUT["fund"]),
+            join(bold(MODE_TITLES["split"]), " — ", MODE_ABOUT["split"]),
         ),
+        italic("Позже режим можно сменить командой /mode, пока операций нет"),
+    )
+
+
+def mode_card(group: Group) -> Rich:
+    """Подтверждение выбранного режима."""
+    hint = (
+        join("Записывайте покупки — бот сам посчитает, кто кому должен. "
+             "Долг возвращают командой ", cmd("/add"), ".")
+        if group.is_split
+        else join("Скидывайтесь в фонд командой ", cmd("/add"),
+                  " и записывайте покупки — фонд будет таять.")
+    )
+    return blocks(
+        heading(3, join(MODE_TITLES[group.mode], " — «", group.title, "»")),
+        join(MODE_ABOUT[group.mode]),
+        quote(hint),
+    )
+
+
+def help_text(bot_username: str | None = None, *, split: bool = False) -> Rich:
+    mention = f"@{bot_username}" if bot_username else "@бот"
+    mode = "split" if split else "fund"
+
+    inline_rows = [
+        [code(mention + " 850 молоко хлеб"), "покупка"],
+    ]
+    if not split:
+        inline_rows.append([code(mention + " внёс 5000"), "взнос"])
+    inline_rows += [
+        [code(mention + " стата категории"), "диаграмма"],
+        [code(mention + " стата люди"), "по людям"],
+        [code(mention + " баланс"), "балансы"],
+    ]
+
+    parts: list[Rich] = [
+        heading(1, join("💼 Общий бюджет · ", MODE_TITLES[mode])),
+        join(MODE_ABOUT[mode]),
         heading(2, "В личке"),
         bullets(
-            "Кнопки меню: внести, записать покупку, статистика, свои операции",
+            "Кнопки меню: "
+            + ("вернуть долг" if split else "внести")
+            + ", записать покупку, статистика, свои операции",
             join("Можно и текстом: ", code("молоко хлеб 850")),
         ),
         heading(2, "В группе"),
         table(
             ["Команда", "Что делает"],
             [
-                [cmd("/add 5000"), "взнос в фонд"],
+                [
+                    cmd("/add 5000"),
+                    "вернуть долг участнику" if split else "взнос в фонд",
+                ],
                 [cmd("/buy молоко хлеб 850"), "покупка"],
-                [cmd("/balance"), "балансы участников"],
+                [
+                    cmd("/balance"),
+                    "балансы и кто кому должен" if split else "балансы участников",
+                ],
                 [cmd("/stats категории"), "круговая диаграмма"],
                 [cmd("/ops"), "последние операции"],
                 [cmd("/voice"), "записать операцию голосом"],
                 [cmd("/join"), "присоединиться к бюджету чата"],
+                [cmd("/mode"), "режим расчётов"],
             ],
         ),
         heading(2, "В любом чате — inline"),
-        table(
-            ["Запрос", "Результат"],
-            [
-                [code(mention + " 850 молоко хлеб"), "покупка"],
-                [code(mention + " внёс 5000"), "взнос"],
-                [code(mention + " стата категории"), "диаграмма"],
-                [code(mention + " стата люди"), "по людям"],
-                [code(mention + " баланс"), "балансы"],
-            ],
-        ),
+        table(["Запрос", "Результат"], inline_rows),
     ]
 
     if settings.web_enabled:
