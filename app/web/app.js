@@ -9,6 +9,8 @@ const state = {
   groupId: null,
   members: [],
   categories: [],
+  operations: [],
+  stats: null,
   kind: 'purchase',
   category: 'food',
   participants: new Set(),
@@ -16,9 +18,23 @@ const state = {
   mode: 'categories',
   period: 'month',
   editing: null,
+  pick: null,
 };
 
+// Код категории → иконка из спрайта в index.html
+const CAT_ICON = {
+  food: 'c-food',
+  household: 'c-household',
+  utilities: 'c-utilities',
+  subscriptions: 'c-subscriptions',
+  goods: 'c-goods',
+  other: 'c-other',
+};
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
 const $ = (id) => document.getElementById(id);
+
 const el = (tag, cls, text) => {
   const node = document.createElement(tag);
   if (cls) node.className = cls;
@@ -26,22 +42,50 @@ const el = (tag, cls, text) => {
   return node;
 };
 
-function money(cents) {
-  const value = (cents / 100).toLocaleString('ru-RU', {
+function icon(name, cls = 'ic') {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', cls);
+  const use = document.createElementNS(SVG_NS, 'use');
+  use.setAttribute('href', `#${name}`);
+  svg.appendChild(use);
+  return svg;
+}
+
+// Пастельный цвет категории — подложкой под иконку, а не заливкой в упор.
+function tint(hex, alpha) {
+  const value = hex.replace('#', '');
+  const int = Number.parseInt(value.length === 3
+    ? value.split('').map((c) => c + c).join('')
+    : value, 16);
+  return `rgba(${(int >> 16) & 255}, ${(int >> 8) & 255}, ${int & 255}, ${alpha})`;
+}
+
+function money(cents, { short = false } = {}) {
+  const rubles = cents / 100;
+  if (short && Math.abs(rubles) >= 100000) {
+    return `${(rubles / 1000).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} тыс ₽`;
+  }
+  const value = rubles.toLocaleString('ru-RU', {
     minimumFractionDigits: cents % 100 ? 2 : 0,
     maximumFractionDigits: 2,
   });
   return `${value} ₽`;
 }
 
-function signed(cents) {
-  return (cents > 0 ? '+' : '') + money(cents);
-}
+const signed = (cents) => (cents > 0 ? '+' : '') + money(cents);
+
+const initial = (name) => (name || '?').trim().charAt(0).toUpperCase();
 
 function parseAmount(text) {
   const cleaned = String(text || '').replace(/\s/g, '').replace(',', '.');
   const value = Number.parseFloat(cleaned);
   return Number.isFinite(value) && value > 0 ? Math.round(value * 100) : null;
+}
+
+function haptic(kind = 'light') {
+  try {
+    if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred(kind);
+  } catch (_) { /* старый клиент — не беда */ }
 }
 
 function toast(message) {
@@ -75,7 +119,7 @@ async function api(path, options = {}) {
 }
 
 function showAuth(message) {
-  $('auth').style.display = 'grid';
+  $('auth').style.display = 'flex';
   $('app').hidden = true;
   $('auth-text').textContent = message;
 }
@@ -132,7 +176,7 @@ async function authenticate() {
 }
 
 // --------------------------------------------------------------------------- //
-//  Загрузка и отрисовка
+//  Загрузка
 // --------------------------------------------------------------------------- //
 
 async function bootstrap() {
@@ -144,11 +188,17 @@ async function bootstrap() {
     select.appendChild(option);
   });
   select.value = String(state.groupId);
-  select.hidden = state.groups.length < 2;
+  select.disabled = state.groups.length < 2;
+  updateGroupName();
 
   state.categories = await api('/categories');
   renderCategories();
   await refresh();
+}
+
+function updateGroupName() {
+  const group = state.groups.find((item) => item.id === state.groupId);
+  $('group-name').textContent = group ? group.title : 'Бюджет';
 }
 
 async function refresh() {
@@ -162,47 +212,161 @@ async function refresh() {
     members.forEach((member) => state.participants.add(member.id));
   }
 
-  $('fund').textContent = money(summary.fund_left);
-  $('fund-sub').textContent =
-    `Внесено ${money(summary.total_contributed)} · потрачено ${money(summary.total_spent)}`;
-
-  const box = $('balances');
-  box.innerHTML = '';
-  summary.members.forEach((item) => {
-    const chip = el('div', `balance ${item.balance > 0 ? 'pos' : item.balance < 0 ? 'neg' : ''}`);
-    chip.appendChild(el('span', null, item.name));
-    chip.appendChild(el('b', null, signed(item.balance)));
-    box.appendChild(chip);
-  });
-
+  renderFund(summary);
+  renderBalances(summary);
   renderParticipants();
   await Promise.all([loadOperations(), loadStats()]);
 }
 
+// --------------------------------------------------------------------------- //
+//  Главная
+// --------------------------------------------------------------------------- //
+
+function renderFund(summary) {
+  $('fund').textContent = money(summary.fund_left);
+  $('fund-in').textContent = money(summary.total_contributed, { short: true });
+  $('fund-out').textContent = money(summary.total_spent, { short: true });
+
+  const share = summary.total_contributed
+    ? Math.min(100, Math.round((summary.total_spent / summary.total_contributed) * 100))
+    : 0;
+  $('fund-share').textContent = `${share}%`;
+  $('meter-fill').style.width = `${share}%`;
+}
+
+function renderBalances(summary) {
+  const box = $('balances');
+  box.innerHTML = '';
+
+  summary.members.forEach((item) => {
+    const sign = item.balance > 0 ? 'pos' : item.balance < 0 ? 'neg' : '';
+    const card = el('div', `balance ${sign}`);
+
+    const top = el('div', 'balance-top');
+    top.append(el('div', 'avatar', initial(item.name)), el('div', 'balance-name', item.name));
+
+    card.append(top, el('div', 'balance-sum', signed(item.balance)));
+    card.appendChild(el('div', 'balance-note',
+      item.balance > 0 ? 'переплатил' : item.balance < 0 ? 'нужно доложить' : 'в расчёте'));
+    box.appendChild(card);
+  });
+}
+
+// --------------------------------------------------------------------------- //
+//  Операции
+// --------------------------------------------------------------------------- //
+
+async function loadOperations() {
+  state.operations = await api(
+    `/groups/${state.groupId}/operations?scope=${state.scope}&limit=50`
+  );
+  renderOperations($('ops-list'), state.operations);
+  renderOperations($('recent'), state.operations.slice(0, 4));
+}
+
+function operationRow(operation) {
+  const category = state.categories.find((item) => item.code === operation.category);
+  const contribution = operation.kind === 'contribution';
+
+  const row = el('div', `op${contribution ? ' in' : ''}`);
+
+  const badge = el('div', 'op-icon');
+  badge.style.background = contribution
+    ? tint('#2f9c5c', 0.16)
+    : tint(category ? category.color : '#8e8d88', 0.28);
+  badge.appendChild(icon(contribution ? 'i-wallet' : CAT_ICON[operation.category] || 'c-other'));
+
+  const main = el('div', 'op-main');
+  main.appendChild(el('div', 'op-title', contribution
+    ? 'Взнос в фонд'
+    : operation.title || operation.category_title));
+
+  const when = new Date(`${operation.occurred_at}Z`).toLocaleString('ru-RU',
+    { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const people = !contribution && operation.shares.length < state.members.length
+    ? ` · делят: ${operation.shares.map((share) => share.name).join(', ')}`
+    : '';
+  main.appendChild(el('div', 'op-meta', `${operation.author} · ${when}${people}`));
+
+  const right = el('div', 'op-right');
+  right.appendChild(el('div', 'op-sum',
+    contribution ? `+${money(operation.amount)}` : money(operation.amount)));
+
+  if (operation.can_edit) {
+    const actions = el('div', 'op-actions');
+
+    const edit = el('button', 'mini-btn');
+    edit.type = 'button';
+    edit.title = 'Изменить';
+    edit.appendChild(icon('i-pencil'));
+    edit.onclick = () => startEdit(operation);
+
+    const remove = el('button', 'mini-btn danger');
+    remove.type = 'button';
+    remove.title = 'Удалить';
+    remove.appendChild(icon('i-trash'));
+    remove.onclick = () => removeOperation(operation);
+
+    actions.append(edit, remove);
+    right.appendChild(actions);
+  }
+
+  row.append(badge, main, right);
+  return row;
+}
+
+function renderOperations(box, operations) {
+  box.innerHTML = '';
+  if (!operations.length) {
+    box.appendChild(el('div', 'empty', 'Пока нет операций'));
+    return;
+  }
+  operations.forEach((operation) => box.appendChild(operationRow(operation)));
+}
+
+async function removeOperation(operation) {
+  if (!confirm(`Удалить операцию на ${money(operation.amount)}?`)) return;
+  await api(`/operations/${operation.id}`, { method: 'DELETE' });
+  haptic('medium');
+  toast('Операция удалена');
+  await refresh();
+}
+
+// --------------------------------------------------------------------------- //
+//  Форма
+// --------------------------------------------------------------------------- //
+
 function renderCategories() {
   const box = $('categories');
   box.innerHTML = '';
+
   state.categories.forEach((category) => {
-    const chip = el('button', `chip${category.code === state.category ? ' active' : ''}`);
-    chip.type = 'button';
-    const dot = el('span', 'dot');
-    dot.style.background = category.color;
-    chip.append(dot, document.createTextNode(`${category.emoji} ${category.title}`));
-    chip.onclick = () => {
+    const button = el('button', `cat${category.code === state.category ? ' active' : ''}`);
+    button.type = 'button';
+
+    const badge = el('div', 'cat-ic');
+    badge.style.background = tint(category.color, 0.32);
+    badge.appendChild(icon(CAT_ICON[category.code] || 'c-other'));
+
+    button.append(badge, el('span', null, category.title));
+    button.onclick = () => {
       state.category = category.code;
       renderCategories();
     };
-    box.appendChild(chip);
+    box.appendChild(button);
   });
 }
 
 function renderParticipants() {
   const box = $('participants');
   box.innerHTML = '';
+
   state.members.forEach((member) => {
     const active = state.participants.has(member.id);
-    const chip = el('button', `chip${active ? ' active' : ''}`, `${active ? '✓ ' : ''}${member.name}`);
+    const chip = el('button', `chip${active ? ' active' : ''}`);
     chip.type = 'button';
+    chip.append(el('span', 'avatar', initial(member.name)),
+      document.createTextNode(member.name));
     chip.onclick = () => {
       if (state.participants.has(member.id)) {
         if (state.participants.size === 1) return toast('Нужен хотя бы один участник');
@@ -222,65 +386,41 @@ function updateKindFields() {
   $('category-field').hidden = !purchase;
   $('participants-field').hidden = !purchase;
   $('title-field').hidden = !purchase;
-  $('submit').textContent = purchase ? 'Записать покупку' : 'Внести в фонд';
+  $('submit').textContent = state.editing
+    ? 'Сохранить изменения'
+    : purchase ? 'Записать покупку' : 'Внести в фонд';
+  document.querySelectorAll('#kind-switch .sw').forEach((button) =>
+    button.classList.toggle('active', button.dataset.kind === state.kind));
 }
 
-// --------------------------------------------------------------------------- //
-//  Операции
-// --------------------------------------------------------------------------- //
-
-async function loadOperations() {
-  const operations = await api(
-    `/groups/${state.groupId}/operations?scope=${state.scope}&limit=50`
-  );
-  const list = $('ops-list');
-  list.innerHTML = '';
-
-  if (!operations.length) {
-    list.appendChild(el('div', 'empty', 'Пока нет операций'));
-    return;
-  }
-
-  const colors = Object.fromEntries(state.categories.map((c) => [c.code, c.color]));
-
-  operations.forEach((operation) => {
-    const row = el('div', 'op');
-    const dot = el('span', 'dot');
-    dot.style.background =
-      operation.kind === 'contribution' ? 'var(--good)' : colors[operation.category] || '#8a8985';
-
-    const main = el('div', 'op-main');
-    main.appendChild(
-      el('div', 'op-title', operation.kind === 'contribution'
-        ? `Взнос в фонд · ${operation.author}`
-        : operation.title || operation.category_title)
-    );
-    const when = new Date(operation.occurred_at + 'Z').toLocaleString('ru-RU',
-      { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-    const parts = operation.shares.length
-      ? ` · на ${operation.shares.length}: ${operation.shares.map((s) => s.name).join(', ')}`
-      : '';
-    main.appendChild(
-      el('div', 'op-meta',
-        `${operation.kind === 'contribution' ? '' : operation.category_title + ' · '}` +
-        `${operation.author} · ${when}${parts}`)
-    );
-
-    const right = el('div');
-    right.appendChild(el('div', 'op-sum', money(operation.amount)));
-    if (operation.can_edit) {
-      const actions = el('div', 'op-actions');
-      const edit = el('button', 'mini-btn edit', '✏️');
-      edit.onclick = () => startEdit(operation);
-      const remove = el('button', 'mini-btn danger', '🗑');
-      remove.onclick = () => removeOperation(operation);
-      actions.append(edit, remove);
-      right.appendChild(actions);
+function openSheet() {
+  $('sheet').hidden = false;
+  document.body.style.overflow = 'hidden';
+  try {
+    if (tg && tg.BackButton) {
+      tg.BackButton.show();
+      tg.BackButton.onClick(closeSheet);
     }
+  } catch (_) { /* нет BackButton — закрываем крестиком */ }
+}
 
-    row.append(dot, main, right);
-    list.appendChild(row);
-  });
+function closeSheet() {
+  $('sheet').hidden = true;
+  document.body.style.overflow = '';
+  try {
+    if (tg && tg.BackButton) {
+      tg.BackButton.offClick(closeSheet);
+      tg.BackButton.hide();
+    }
+  } catch (_) { /* см. выше */ }
+  if (state.editing) resetForm();
+}
+
+function newOperation() {
+  resetForm();
+  $('sheet-title').textContent = 'Новая операция';
+  openSheet();
+  haptic();
 }
 
 function startEdit(operation) {
@@ -288,40 +428,18 @@ function startEdit(operation) {
   state.kind = operation.kind;
   state.category = operation.category || 'other';
   state.participants = new Set(operation.shares.map((share) => share.user_id));
+
   $('amount').value = (operation.amount / 100).toString().replace('.', ',');
   $('title').value = operation.title || '';
   $('raw-text').value = '';
-  $('submit').textContent = 'Сохранить изменения';
-  document.querySelectorAll('#kind-switch .seg').forEach((button) =>
-    button.classList.toggle('active', button.dataset.kind === state.kind));
+  $('add-status').textContent = '';
+  $('sheet-title').textContent = 'Правка операции';
+  $('cancel-edit').hidden = false;
+
   updateKindFields();
   renderCategories();
   renderParticipants();
-  switchTab('add');
-  $('add-status').textContent = `Правим операцию #${operation.id}. Очистить — кнопка «Отмена» ниже.`;
-  showCancelEdit(true);
-}
-
-async function removeOperation(operation) {
-  if (!confirm(`Удалить операцию на ${money(operation.amount)}?`)) return;
-  await api(`/operations/${operation.id}`, { method: 'DELETE' });
-  toast('Операция удалена');
-  await refresh();
-}
-
-function showCancelEdit(show) {
-  let button = $('cancel-edit');
-  if (!show) {
-    if (button) button.remove();
-    return;
-  }
-  if (button) return;
-  button = el('button', 'ghost-btn', 'Отмена');
-  button.id = 'cancel-edit';
-  button.type = 'button';
-  button.style.marginTop = '8px';
-  button.onclick = resetForm;
-  $('submit').after(button);
+  openSheet();
 }
 
 function resetForm() {
@@ -330,22 +448,26 @@ function resetForm() {
   $('title').value = '';
   $('raw-text').value = '';
   $('add-status').textContent = '';
+  $('sheet-title').textContent = 'Новая операция';
+  $('cancel-edit').hidden = true;
   state.participants = new Set(state.members.map((member) => member.id));
   renderParticipants();
   updateKindFields();
-  showCancelEdit(false);
 }
 
-async function submitForm() {
+async function submitForm(event) {
+  event.preventDefault();
+
   const amount = parseAmount($('amount').value);
   if (!amount) return toast('Укажите сумму');
 
+  const purchase = state.kind === 'purchase';
   const body = {
     kind: state.kind,
     amount,
     title: $('title').value.trim() || null,
-    category: state.kind === 'purchase' ? state.category : null,
-    participant_ids: state.kind === 'purchase' ? [...state.participants] : null,
+    category: purchase ? state.category : null,
+    participant_ids: purchase ? [...state.participants] : null,
   };
 
   $('submit').disabled = true;
@@ -366,9 +488,11 @@ async function submitForm() {
         method: 'POST',
         body: JSON.stringify(body),
       });
-      toast(state.kind === 'purchase' ? 'Покупка записана' : 'Взнос записан');
+      toast(purchase ? 'Покупка записана' : 'Взнос записан');
     }
+    haptic('medium');
     resetForm();
+    closeSheet();
     await refresh();
   } catch (error) {
     $('add-status').textContent = error.message;
@@ -402,114 +526,154 @@ async function parseWithLLM() {
 }
 
 // --------------------------------------------------------------------------- //
-//  Диаграмма
+//  Статистика
 // --------------------------------------------------------------------------- //
 
+const RING = { r: 74, width: 26, gap: 3.5 };
+
 async function loadStats() {
-  const stats = await api(
+  state.stats = await api(
     `/groups/${state.groupId}/stats?mode=${state.mode}&period=${state.period}`
   );
-  drawDonut(stats);
+  state.pick = null;
+  drawDonut();
+  renderLegend();
+  showCenter();
 
-  const body = $('legend').querySelector('tbody');
-  body.innerHTML = '';
-  stats.slices.forEach((slice) => {
-    const row = el('tr');
-    const name = el('td');
-    const dot = el('span', 'dot');
-    dot.style.background = slice.color;
-    name.append(dot, document.createTextNode(slice.label));
-    row.append(name, el('td', null, money(slice.value)),
-      el('td', null, `${((slice.value / stats.total) * 100).toFixed(1)}%`));
-    body.appendChild(row);
-  });
-
-  $('chart-total').textContent = stats.total
-    ? `${stats.period_title}: ${money(stats.total)}`
-    : `${stats.period_title}: расходов нет`;
+  $('chart-total').textContent = state.stats.total
+    ? state.stats.period_title
+    : `${state.stats.period_title}: расходов нет`;
 }
 
-function drawDonut(stats) {
-  const canvas = $('donut');
-  const context = canvas.getContext('2d');
-  const size = canvas.width;
-  const center = size / 2;
-  const outer = center - 12;
-  const inner = outer * 0.62;
-  const surface = getComputedStyle(document.body).getPropertyValue('--surface-2').trim();
-  const text = getComputedStyle(document.body).getPropertyValue('--text').trim();
-  const muted = getComputedStyle(document.body).getPropertyValue('--muted').trim();
+function drawDonut() {
+  const svg = $('donut');
+  const stats = state.stats;
+  const circumference = 2 * Math.PI * RING.r;
 
-  context.clearRect(0, 0, size, size);
+  svg.innerHTML = '';
+  svg.classList.remove('has-pick');
+
+  const ring = (cls) => {
+    const circle = document.createElementNS(SVG_NS, 'circle');
+    circle.setAttribute('cx', '100');
+    circle.setAttribute('cy', '100');
+    circle.setAttribute('r', String(RING.r));
+    circle.setAttribute('fill', 'none');
+    circle.setAttribute('stroke-width', String(RING.width));
+    if (cls) circle.setAttribute('class', cls);
+    return circle;
+  };
 
   if (!stats.total) {
-    context.strokeStyle = muted;
-    context.lineWidth = outer - inner;
-    context.beginPath();
-    context.arc(center, center, (outer + inner) / 2, 0, Math.PI * 2);
-    context.globalAlpha = 0.18;
-    context.stroke();
-    context.globalAlpha = 1;
+    svg.appendChild(ring('track'));
     return;
   }
 
-  let angle = -Math.PI / 2;
-  stats.slices.forEach((slice) => {
-    const sweep = (slice.value / stats.total) * Math.PI * 2;
-    context.beginPath();
-    context.arc(center, center, outer, angle, angle + sweep);
-    context.arc(center, center, inner, angle + sweep, angle, true);
-    context.closePath();
-    context.fillStyle = slice.color;
-    context.fill();
-    // Зазор цветом подложки: сегменты не сливаются друг с другом.
-    context.strokeStyle = surface || '#ffffff';
-    context.lineWidth = 4;
-    context.stroke();
+  // Одна категория на весь период — это кольцо целиком, без зазора и концов.
+  const solo = stats.slices.length === 1;
 
-    const share = slice.value / stats.total;
-    if (share >= 0.05) {
-      const middle = angle + sweep / 2;
-      const radius = (outer + inner) / 2;
-      // Палитра пастельная — процент пишем тёмным, белый на ней не читается
-      context.fillStyle = '#1a1a19';
-      context.font = 'bold 26px -apple-system, "Segoe UI", Roboto, sans-serif';
-      context.textAlign = 'center';
-      context.textBaseline = 'middle';
-      context.fillText(
-        `${Math.round(share * 100)}%`,
-        center + Math.cos(middle) * radius,
-        center + Math.sin(middle) * radius
-      );
-    }
-    angle += sweep;
+  let offset = 0;
+  stats.slices.forEach((slice, index) => {
+    const length = (slice.value / stats.total) * circumference;
+    // Скруглённые концы добавляют половину толщины с каждой стороны — на узком
+    // секторе это превращает полоску в кружок, поэтому там концы прямые.
+    const gap = solo ? 0 : RING.gap;
+    const rounded = !solo && length - gap > RING.width * 1.2;
+    const drawn = Math.max(length - gap - (rounded ? RING.width : 0), 0.6);
+
+    const arc = ring('seg-arc');
+    arc.setAttribute('stroke', slice.color);
+    arc.setAttribute('stroke-linecap', rounded ? 'round' : 'butt');
+    arc.setAttribute('stroke-dasharray', `${drawn} ${circumference - drawn}`);
+    arc.setAttribute('transform',
+      `rotate(${((offset + gap / 2 + (rounded ? RING.width / 2 : 0)) / circumference) * 360 - 90} 100 100)`);
+    arc.dataset.index = String(index);
+    arc.addEventListener('click', () => pickSlice(index));
+    svg.appendChild(arc);
+
+    offset += length;
   });
+}
 
-  context.fillStyle = text;
-  context.font = 'bold 40px -apple-system, "Segoe UI", Roboto, sans-serif';
-  context.textAlign = 'center';
-  context.textBaseline = 'middle';
-  context.fillText(money(stats.total), center, center - 10);
-  context.fillStyle = muted;
-  context.font = '24px -apple-system, "Segoe UI", Roboto, sans-serif';
-  context.fillText('всего', center, center + 30);
+function pickSlice(index) {
+  state.pick = state.pick === index ? null : index;
+  const svg = $('donut');
+  svg.classList.toggle('has-pick', state.pick !== null);
+  svg.querySelectorAll('.seg-arc').forEach((arc) =>
+    arc.classList.toggle('pick', Number(arc.dataset.index) === state.pick));
+  document.querySelectorAll('#legend .legend-row').forEach((row) =>
+    row.classList.toggle('pick', Number(row.dataset.index) === state.pick));
+  showCenter();
+  haptic();
+}
+
+function showCenter() {
+  const stats = state.stats;
+  if (!stats || !stats.total) {
+    $('donut-value').textContent = '0 ₽';
+    $('donut-label').textContent = 'нет расходов';
+    return;
+  }
+  if (state.pick === null) {
+    $('donut-value').textContent = money(stats.total, { short: true });
+    $('donut-label').textContent = 'всего';
+    return;
+  }
+  const slice = stats.slices[state.pick];
+  $('donut-value').textContent = money(slice.value, { short: true });
+  $('donut-label').textContent = slice.label;
+}
+
+function renderLegend() {
+  const box = $('legend');
+  const stats = state.stats;
+  box.innerHTML = '';
+
+  if (!stats.total) {
+    box.appendChild(el('div', 'empty', 'За этот период расходов не было'));
+    return;
+  }
+
+  const top = Math.max(...stats.slices.map((slice) => slice.value), 1);
+
+  stats.slices.forEach((slice, index) => {
+    const row = el('div', 'legend-row');
+    row.dataset.index = String(index);
+    row.onclick = () => pickSlice(index);
+
+    const name = el('div', 'legend-name');
+    const dot = el('span', 'dot');
+    dot.style.background = slice.color;
+    name.append(dot, el('span', null, slice.label));
+
+    const bar = el('div', 'legend-bar');
+    const fill = el('i');
+    fill.style.width = `${Math.max((slice.value / top) * 100, 3)}%`;
+    fill.style.background = slice.color;
+    bar.appendChild(fill);
+
+    row.append(name, el('div', 'legend-sum', money(slice.value)), bar,
+      el('div', 'legend-share', `${((slice.value / stats.total) * 100).toFixed(1)}% от расходов`));
+    box.appendChild(row);
+  });
 }
 
 // --------------------------------------------------------------------------- //
-//  Навигация и события
+//  Навигация
 // --------------------------------------------------------------------------- //
 
 function switchTab(name) {
-  document.querySelectorAll('.tab').forEach((tab) =>
+  document.querySelectorAll('.tabbtn').forEach((tab) =>
     tab.classList.toggle('active', tab.dataset.tab === name));
-  document.querySelectorAll('.tab-panel').forEach((panel) =>
+  document.querySelectorAll('.panel').forEach((panel) =>
     panel.classList.toggle('active', panel.id === `tab-${name}`));
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function bindSegmented(id, key, onChange) {
-  document.querySelectorAll(`#${id} .seg`).forEach((button) => {
+function bindGroup(id, key, onChange) {
+  document.querySelectorAll(`#${id} > *`).forEach((button) => {
     button.onclick = () => {
-      document.querySelectorAll(`#${id} .seg`).forEach((other) =>
+      document.querySelectorAll(`#${id} > *`).forEach((other) =>
         other.classList.toggle('active', other === button));
       state[key] = button.dataset[key];
       onChange();
@@ -517,16 +681,24 @@ function bindSegmented(id, key, onChange) {
   });
 }
 
-document.querySelectorAll('.tab').forEach((tab) => {
+document.querySelectorAll('.tabbtn').forEach((tab) => {
   tab.onclick = () => switchTab(tab.dataset.tab);
 });
+document.querySelectorAll('[data-goto]').forEach((button) => {
+  button.onclick = () => switchTab(button.dataset.goto);
+});
+document.querySelectorAll('[data-close]').forEach((button) => {
+  button.onclick = closeSheet;
+});
 
-bindSegmented('kind-switch', 'kind', updateKindFields);
-bindSegmented('scope-switch', 'scope', () => loadOperations().catch(() => {}));
-bindSegmented('mode-switch', 'mode', () => loadStats().catch(() => {}));
-bindSegmented('period-switch', 'period', () => loadStats().catch(() => {}));
+bindGroup('kind-switch', 'kind', updateKindFields);
+bindGroup('scope-switch', 'scope', () => loadOperations().catch(() => {}));
+bindGroup('mode-switch', 'mode', () => loadStats().catch(() => {}));
+bindGroup('period-switch', 'period', () => loadStats().catch(() => {}));
 
-$('submit').onclick = submitForm;
+$('fab').onclick = newOperation;
+$('op-form').onsubmit = submitForm;
+$('cancel-edit').onclick = resetForm;
 $('parse-btn').onclick = parseWithLLM;
 $('reload').onclick = () => refresh().then(() => toast('Обновлено')).catch(() => {});
 
@@ -540,18 +712,35 @@ $('raw-text').addEventListener('keydown', (event) => {
 $('group-select').onchange = async (event) => {
   state.groupId = Number(event.target.value);
   state.participants = new Set();
+  updateGroupName();
   await api(`/me/active-group/${state.groupId}`, { method: 'POST' });
   await refresh();
 };
 
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !$('sheet').hidden) closeSheet();
+});
+
 if (tg) {
   tg.ready();
   tg.expand();
-  // В мини-аппе тему задаёт Telegram, а не системная настройка браузера.
-  if (tg.colorScheme) document.documentElement.dataset.theme = tg.colorScheme;
-  tg.onEvent('themeChanged', () => {
-    document.documentElement.dataset.theme = tg.colorScheme;
-  });
+
+  // В мини-аппе тему задаёт Telegram. В обычном браузере скрипт Telegram тоже
+  // загружается и рапортует светлую тему — там мы к нему не прислушиваемся,
+  // иначе тёмная тема системы никогда не включится.
+  const applyTheme = () => {
+    document.documentElement.dataset.theme = tg.colorScheme || 'light';
+    try {
+      const bg = getComputedStyle(document.body).getPropertyValue('--bg').trim();
+      tg.setHeaderColor(bg);
+      tg.setBackgroundColor(bg);
+    } catch (_) { /* старый клиент цвет шапки не умеет */ }
+  };
+
+  if (tg.platform && tg.platform !== 'unknown') {
+    applyTheme();
+    tg.onEvent('themeChanged', applyTheme);
+  }
 }
 
 updateKindFields();

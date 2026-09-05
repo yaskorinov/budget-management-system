@@ -2,3 +2,6 @@
 # иначе deploy/install.sh и Dockerfile ломаются на VPS.
 * text=auto eol=lf
 *.png binary
+*.woff2 binary
+*.ttf binary
+*.mp4 binary
