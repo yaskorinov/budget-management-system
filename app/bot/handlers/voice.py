@@ -99,7 +99,19 @@ async def voice_message(
         return
 
     fmt = stt.audio_format(media.mime_type, getattr(media, "file_name", None))
-    text = await stt.transcribe(audio, fmt)
+    try:
+        text = await stt.transcribe(audio, fmt)
+    except stt.VoiceUnavailable:
+        # Причина уже в логе: ключ, баланс, лимит. Человеку нужен выход, а не код ошибки
+        await answer_rich(
+            message,
+            texts.blocks(
+                texts.join("Распознавание сейчас недоступно."),
+                texts.italic("Запишите операцию текстом: молоко хлеб 850"),
+            ),
+            reply=True,
+        )
+        return
     if not text:
         await answer_rich(
             message,

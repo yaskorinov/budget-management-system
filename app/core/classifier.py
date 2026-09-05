@@ -143,7 +143,12 @@ async def chat(
         response = await client.post(
             f"{base}/chat/completions", headers=_headers(), json=payload
         )
-        response.raise_for_status()
+        if response.is_error:
+            # raise_for_status показывает только код, а причина — в теле ответа:
+            # без неё «402» не отличить от «модель не найдена»
+            raise RuntimeError(
+                f"{response.status_code} от {base}: {response.text[:300]}"
+            )
         return response.json()["choices"][0]["message"]["content"]
 
 

@@ -14,6 +14,11 @@ from app.core.classifier import chat
 
 log = logging.getLogger(__name__)
 
+
+class VoiceUnavailable(RuntimeError):
+    """Модель не ответила. Отличается от «не разобрал слова»: там виновата
+    запись, здесь — доступ к модели, и человеку нужно сказать разное."""
+
 PROMPT = (
     "Расшифруй голосовое сообщение на русском языке. "
     "Верни только произнесённый текст, без пояснений, без кавычек и без перевода. "
@@ -69,7 +74,7 @@ async def transcribe(audio: bytes, fmt: str = "ogg") -> str | None:
         )
     except Exception as exc:
         log.warning("Расшифровка не удалась (%s)", exc)
-        return None
+        raise VoiceUnavailable(str(exc)) from exc
 
     text = (answer or "").strip().strip('"«»')
     return text or None

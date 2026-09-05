@@ -605,6 +605,21 @@ async def main():
     assert any("Не разобрал" in t for t in session.texts()), session.texts()
     print("### неразборчивую запись бот не выдумывает ✓")
 
+    # модель недоступна — это не «не разобрал», и сообщение другое
+    async def unavailable(audio, fmt="ogg"):
+        raise stt.VoiceUnavailable("402 Payment Required")
+
+    voice_module.stt.transcribe = unavailable
+    logging.getLogger("app.core.voice").setLevel(logging.CRITICAL)
+    session.reset()
+    await dp.feed_update(bot, upd(message=voice_msg("voice-4")))
+    out = session.texts()
+    logging.getLogger("app.core.voice").setLevel(logging.NOTSET)
+    assert any("недоступно" in t for t in out), out
+    assert not any("Не разобрал" in t for t in out), "причина другая — и текст другой"
+    print("### недоступную модель бот не выдаёт за плохую запись ✓")
+
+
     # ---- ежедневные сообщения ----
     import datetime as _dt
 
