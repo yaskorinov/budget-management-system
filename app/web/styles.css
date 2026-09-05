@@ -575,10 +575,15 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
   animation: rise .2s ease both;
 }
 
-/* На широком экране мини-приложение остаётся колонкой по центру холста. */
+/* На широком экране мини-приложение остаётся колонкой по центру холста —
+   и экран входа тоже, иначе лаймовый блок расплывается на весь монитор. */
 @media (min-width: 700px) {
-  body { background: var(--bg); }
-  .auth-hero { padding: 72px 40px 56px; }
+  .auth { padding: 0 16px; }
+  .auth-hero, .auth-card {
+    width: 100%; max-width: var(--col); margin-left: auto; margin-right: auto;
+  }
+  .auth-hero { border-radius: 0 0 var(--r-xl) var(--r-xl); }
+  .auth-card { border-radius: var(--r-xl); margin-bottom: 24px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
