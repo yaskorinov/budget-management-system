@@ -12,15 +12,16 @@ services:
     environment:
       # В контейнере слушаем все интерфейсы; наружу порт публикуется ниже.
       HOST: 0.0.0.0
-      PORT: "8080"
+      PORT: "${PORT:-8080}"
       DATABASE_URL: sqlite+aiosqlite:///./data/expenses.db
 
     # Только localhost: наружу пускает nginx или Caddy (см. deploy/).
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:${PORT:-8080}:${PORT:-8080}"
 
-    # Прокси на хосте: внутри контейнера 127.0.0.1 — это сам контейнер,
-    # поэтому в PROXY_URL пишем host.docker.internal
+    # Прокси на хосте: внутри контейнера 127.0.0.1 — это сам контейнер.
+    # Если прокси слушает только loopback хоста, берите оверлей
+    # deploy/docker-compose.proxy.yml, иначе — host.docker.internal.
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -33,7 +34,7 @@ services:
         - CMD
         - python
         - -c
-        - import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3).status == 200 else 1)
+        - import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:${PORT:-8080}/healthz', timeout=3).status == 200 else 1)
       interval: 30s
       timeout: 5s
       retries: 3

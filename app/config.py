@@ -86,6 +86,16 @@ class Settings(BaseSettings):
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1", "0.0.0.0"}
 
 
+def in_host_network() -> bool:
+    """Контейнер запущен с network_mode: host?
+
+    В своей сети контейнер видит только lo и eth0; docker0 — интерфейс хоста,
+    так что его появление означает, что сетевой стек общий с хостом и
+    127.0.0.1 указывает туда же, куда и на хосте.
+    """
+    return Path("/sys/class/net/docker0").exists()
+
+
 def proxy_warning(settings: "Settings") -> str | None:
     """Предупреждение про прокси на loopback внутри контейнера.
 
@@ -93,7 +103,7 @@ def proxy_warning(settings: "Settings") -> str | None:
     Ошибка при этом выглядит как «Connection refused», хотя на хосте всё
     работает, — подсказываем сразу, чтобы не искать.
     """
-    if not Path("/.dockerenv").exists():
+    if not Path("/.dockerenv").exists() or in_host_network():
         return None
 
     hosts = {
@@ -106,8 +116,9 @@ def proxy_warning(settings: "Settings") -> str | None:
 
     return (
         "Прокси указан на localhost, а бот работает в контейнере: там это адрес "
-        "самого контейнера. Пропишите host.docker.internal вместо 127.0.0.1 и "
-        "убедитесь, что прокси слушает не только loopback."
+        "самого контейнера. Если прокси слушает только loopback хоста, поднимите "
+        "бота с deploy/docker-compose.proxy.yml (сеть хоста); если он слушает все "
+        "интерфейсы — впишите host.docker.internal вместо 127.0.0.1."
     )
 
 
