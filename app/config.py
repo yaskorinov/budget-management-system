@@ -34,11 +34,13 @@ class Settings(BaseSettings):
     # LLM
     llm_provider: str = "openai_compat"  # anthropic | openai_compat | off
     llm_api_key: str = ""
-    llm_model: str = "gemini-3.5-flash-lite"
+    llm_model: str = "gemini-3.1-flash-lite"
     llm_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     llm_timeout_seconds: float = 8.0
-    # Модель для расшифровки голоса: основная принимает только текст
-    llm_voice_model: str = "gemini-3.5-flash"
+    # Модель для расшифровки голоса. У Gemini аудио принимает и flash-lite,
+    # так что по умолчанию та же самая — отдельная нужна, только если
+    # распознавание начнёт ошибаться
+    llm_voice_model: str = "gemini-3.1-flash-lite"
     llm_voice_timeout_seconds: float = 60.0
 
     # Ежедневные сообщения, часы по локальному времени; -1 — выключить

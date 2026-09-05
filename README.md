@@ -130,11 +130,13 @@ python scripts/check_llm.py "туалетка и фейри 450"
 
 Боту нужен Bot API 10.3 и aiogram 3.31 — на них появились rich-сообщения.
 
-**Про LLM.** По умолчанию — Gemini через его OpenAI-совместимый эндпоинт:
-`gemini-3.5-flash-lite` для категоризации и советов, `gemini-3.5-flash` для
-расшифровки голоса (та же модель принимает аудио, отдельная нужна только чтобы
-для распознавания взять поживее). Ключ — из
-[AI Studio](https://aistudio.google.com/apikey).
+**Про LLM.** По умолчанию — Gemini через его OpenAI-совместимый эндпоинт,
+`gemini-3.1-flash-lite` и для категоризации, и для голоса: flash-lite принимает
+аудио, поэтому вторая модель не нужна. Ключ — из
+[AI Studio](https://aistudio.google.com/apikey). Если распознавание начнёт
+ошибаться, поднимите `LLM_VOICE_MODEL` до `gemini-3.5-flash` — код не тронется.
+Отдельная модель для голоса обязательна там, где основная не умеет аудио:
+например у Nemotron.
 
 Провайдер `openai_compat` подходит любому эндпоинту `/v1/chat/completions`:
 Gemini, OpenRouter, OpenAI, свой прокси, локальные vLLM/Ollama. `anthropic`
