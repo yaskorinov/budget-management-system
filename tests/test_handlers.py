@@ -374,11 +374,28 @@ async def main():
     assert "Как его назвать" in asked, asked
     show("кнопка «Создать бюджет»", session.texts())
 
-    # название сообщением — бюджет создан, дальше сразу меню
+    # название сообщением — бюджет создан, дальше спрашиваем режим расчётов
     out = await send("Квартира на Лесной", NEWBIE, NEWBIE_CHAT)
     show("название бюджета", out)
     assert any("создан" in text for text in out), out
-    assert any("Осталось в фонде" in text for text in out), "после создания показываем меню"
+    assert any("Как считаем деньги" in text for text in out), "спрашиваем режим"
+
+    # выбираем дележ — подтверждение и меню уже под этот режим
+    modes = session.find("SendRichMessage")[-1]["reply_markup"]["inline_keyboard"]
+    split_data = modes[1][0]["callback_data"]
+    session.reset()
+    cb = CallbackQuery(id="md1", from_user=NEWBIE, chat_instance="x", data=split_data,
+                       message=msg("режим", NEWBIE, NEWBIE_CHAT)).as_(bot)
+    await dp.feed_update(bot, upd(callback_query=cb))
+    assert_markup_ok("выбор режима")
+    after = session.texts()
+    show("выбран режим дележа", after)
+    assert any("Делим расходы" in text for text in after), after
+    assert any("Непогашенных долгов" in text for text in after), "меню под дележ"
+
+    # и обратно в кассу — операций ещё нет, значит можно
+    out = await send("/mode касса", NEWBIE, NEWBIE_CHAT)
+    assert any("Общая касса" in text for text in out), out
 
     # /newgroup без аргументов тоже спрашивает название, а не показывает синтаксис
     out = await send("/newgroup", NEWBIE, NEWBIE_CHAT)

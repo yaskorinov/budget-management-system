@@ -229,6 +229,11 @@ async def pick_mode(
     await callback.answer(texts.MODE_TITLES[group.mode])
     await edit_card(bot, callback, texts.mode_card(group), None)
 
+    # В личке сразу возвращаем человека в меню: выбор режима — не финал.
+    if is_private(callback):
+        text, markup = await render_home(session, user)
+        await answer_rich(callback.message, text, reply_markup=markup)
+
 
 @router.message(Command("mode"))
 async def mode_command(
