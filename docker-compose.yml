@@ -19,6 +19,11 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
 
+    # Прокси на хосте: внутри контейнера 127.0.0.1 — это сам контейнер,
+    # поэтому в PROXY_URL пишем host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
     # Именованный том: Docker сам заводит его с правами пользователя app.
     volumes:
       - budget-data:/app/data

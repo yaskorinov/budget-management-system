@@ -119,6 +119,30 @@ async def main():
     app_settings.llm_proxy_url = ""
     print("прокси: общий и отдельный для модели, пароль в лог не попадает")
 
+    # Прокси на localhost внутри контейнера не работает — предупреждаем заранее
+    import app.config as cfg
+
+    app_settings.proxy_url = "socks5://127.0.0.1:1080"
+    assert cfg.proxy_warning(app_settings) is None, "вне контейнера предупреждать не о чем"
+
+    class InContainer:
+        def __init__(self, path):
+            pass
+
+        def exists(self):
+            return True
+
+    real_path, cfg.Path = cfg.Path, InContainer
+    try:
+        assert "host.docker.internal" in (cfg.proxy_warning(app_settings) or "")
+        app_settings.proxy_url = "socks5://host.docker.internal:1080"
+        assert cfg.proxy_warning(app_settings) is None, "правильный адрес — молчим"
+    finally:
+        cfg.Path = real_path
+        app_settings.proxy_url = ""
+    print("прокси в контейнере: подсказка про host.docker.internal")
+
+
 
     # Голосовое Telegram приходит в ogg/opus — модели ждут mp3 или wav
     import io as _io

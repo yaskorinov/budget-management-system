@@ -16,7 +16,7 @@ from aiogram.types import Update
 from app.api.routes import charts_router, router
 from app.bot.bot import create_bot, create_dispatcher, setup_bot_commands
 from app.bot.scheduler import daily_loop
-from app.config import BASE_DIR, settings
+from app.config import BASE_DIR, proxy_warning, settings
 from app.db.base import init_db
 
 log = logging.getLogger(__name__)
@@ -27,6 +27,9 @@ WEB_DIR = BASE_DIR / "app" / "web"
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await init_db()
+
+    if warning := proxy_warning(settings):
+        log.warning(warning)
 
     app.state.bot = None
     app.state.dispatcher = None

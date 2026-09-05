@@ -83,6 +83,34 @@ class Settings(BaseSettings):
         return self.public_base.startswith("https://")
 
 
+LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1", "0.0.0.0"}
+
+
+def proxy_warning(settings: "Settings") -> str | None:
+    """Предупреждение про прокси на loopback внутри контейнера.
+
+    В контейнере 127.0.0.1 — это сам контейнер, и прокси с хоста туда не виден.
+    Ошибка при этом выглядит как «Connection refused», хотя на хосте всё
+    работает, — подсказываем сразу, чтобы не искать.
+    """
+    if not Path("/.dockerenv").exists():
+        return None
+
+    hosts = {
+        url.split("://")[-1].split("@")[-1].split(":")[0]
+        for url in (settings.proxy_url, settings.llm_proxy_url)
+        if url
+    }
+    if not hosts & LOOPBACK_HOSTS:
+        return None
+
+    return (
+        "Прокси указан на localhost, а бот работает в контейнере: там это адрес "
+        "самого контейнера. Пропишите host.docker.internal вместо 127.0.0.1 и "
+        "убедитесь, что прокси слушает не только loopback."
+    )
+
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
