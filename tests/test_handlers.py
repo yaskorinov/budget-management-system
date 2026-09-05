@@ -729,6 +729,56 @@ async def main():
 
 
 
+    # ---- сквозной сценарий режима дележа ----
+    SPLIT_CHAT = Chat(id=-1002, type="supergroup", title="Поход в горы")
+
+    out = await send("/join", ANYA, SPLIT_CHAT)
+    show("новый чат: подключение", out)
+    assert any("Как считаем деньги" in text for text in out), "у нового чата спрашиваем режим"
+
+    modes = session.find("SendRichMessage")[-1]["reply_markup"]["inline_keyboard"]
+    out = await press(modes[1][0]["callback_data"], ANYA, SPLIT_CHAT)
+    assert any("Делим расходы" in text for text in out), out
+    print("\n### режим дележа выбран кнопкой ✓")
+
+    await send("/join", BORYA, SPLIT_CHAT)
+    out = await send("/buy продукты 900", ANYA, SPLIT_CHAT)
+    show("покупка в дележе", out)
+    assert any("900" in text for text in out), out
+    assert any("Непогашено" in text for text in out), "под карточкой сумма долгов, а не касса"
+
+    out = await send("/balance", ANYA, SPLIT_CHAT)
+    show("балансы в дележе", out)
+    balance = "\n".join(out)
+    assert "Кто кому должен" in balance, balance
+    assert "Боря" in balance and "Аня" in balance, balance
+    assert "Осталось в фонде" not in balance, "кассы в этом режиме нет"
+
+    # Боря возвращает долг: сумма из команды, получатель — кнопкой
+    out = await send("/add 450", BORYA, SPLIT_CHAT)
+    show("возврат долга: выбор получателя", out)
+    assert any("Кому вы отдали деньги" in text for text in out), out
+
+    payees = session.find("SendRichMessage")[-1]["reply_markup"]["inline_keyboard"]
+    assert payees[0][0]["text"] == "Аня", payees
+    out = await press(payees[0][0]["callback_data"], BORYA, SPLIT_CHAT)
+    show("возврат записан", out)
+    assert any("Возврат долга" in text for text in out), out
+    assert any("Боря" in text and "Аня" in text for text in out), out
+
+    out = await send("/balance", ANYA, SPLIT_CHAT)
+    assert "Кто кому должен" not in "\n".join(out), "долг закрыт возвратом"
+    print("### возврат долга гасит долг ✓")
+
+    out = await send("/help", ANYA, SPLIT_CHAT)
+    assert any("Делим расходы" in text for text in out), "справка знает про режим"
+    assert any("вернуть долг участнику" in text for text in out), out
+    print("### справка под режим дележа ✓")
+
+    # Взнос в кассу сюда не пройдёт даже текстом
+    out = await send("внёс 1000", ANYA, SPLIT_CHAT)
+    assert not any("Взнос в фонд" in text for text in out), out
+
     print("\nOK: хендлеры отработали")
 
 asyncio.run(main())
