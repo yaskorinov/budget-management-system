@@ -239,6 +239,10 @@ function renderBalances(summary) {
   const box = $('balances');
   box.innerHTML = '';
 
+  // Ник различает тёзок лучше, чем буква в кружке. Балансы приходят без него,
+  // зато он есть в составе группы — забираем оттуда по идентификатору.
+  const handles = new Map(state.members.map((member) => [member.id, member.username]));
+
   summary.members.forEach((item) => {
     const sign = item.balance > 0 ? 'pos' : item.balance < 0 ? 'neg' : '';
     const card = el('div', `balance ${sign}`);
@@ -246,9 +250,12 @@ function renderBalances(summary) {
     const top = el('div', 'balance-top');
     top.append(el('div', 'avatar', initial(item.name)), el('div', 'balance-name', item.name));
 
+    const status = item.balance > 0 ? 'переплата'
+      : item.balance < 0 ? 'задолженность' : 'в расчёте';
+    const handle = handles.get(item.user_id);
+
     card.append(top);
-    card.appendChild(el('div', 'balance-note',
-      item.balance > 0 ? 'переплата' : item.balance < 0 ? 'долг' : 'в расчёте'));
+    card.appendChild(el('div', 'balance-note', handle ? `@${handle} · ${status}` : status));
     card.appendChild(el('div', `pill-sum ${sign || 'flat'}`, signed(item.balance)));
     box.appendChild(card);
   });

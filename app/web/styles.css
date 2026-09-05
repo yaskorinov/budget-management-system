@@ -286,7 +286,10 @@ button { cursor: pointer; }
   font-size: 14px; font-weight: 600;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.balance-note { font-size: 11.5px; color: var(--ink-3); margin: 8px 0 8px 2px; }
+.balance-note {
+  font-size: 11.5px; color: var(--ink-3); margin: 8px 0 8px 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 
 /* Сумма — заполненная пилюля, как ценник на витрине, а не просто текст. */
 .pill-sum {
