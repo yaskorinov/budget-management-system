@@ -90,7 +90,5 @@ with TestClient(app) as client:
     assert "Общий бюджет" in client.get("/").text
     assert client.get("/app.js").status_code == 200
     assert client.get("/styles.css").status_code == 200
-    # Шрифт мини-аппы раздаётся из assets — монтирование легко потерять
-    assert client.get("/fonts/inter-regular.woff2").status_code == 200
 
 print("\nOK: API работает")

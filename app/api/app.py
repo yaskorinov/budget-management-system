@@ -22,7 +22,6 @@ from app.db.base import init_db
 log = logging.getLogger(__name__)
 
 WEB_DIR = BASE_DIR / "app" / "web"
-FONT_DIR = BASE_DIR / "assets" / "fonts"
 
 
 @asynccontextmanager
@@ -124,11 +123,6 @@ def create_app() -> FastAPI:
         update = Update.model_validate(await request.json(), context={"bot": bot})
         await dispatcher.feed_update(bot, update)
         return {"ok": True}
-
-    # Шрифт мини-аппы лежит рядом со шрифтом диаграмм — раздаём тот же файл,
-    # монтируем до корня, иначе его перехватит catch-all мини-аппы.
-    if FONT_DIR.is_dir():
-        app.mount("/fonts", StaticFiles(directory=FONT_DIR), name="fonts")
 
     if WEB_DIR.is_dir():
         app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")

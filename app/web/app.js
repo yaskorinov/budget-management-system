@@ -21,16 +21,6 @@ const state = {
   pick: null,
 };
 
-// Код категории → иконка из спрайта в index.html
-const CAT_ICON = {
-  food: 'c-food',
-  household: 'c-household',
-  utilities: 'c-utilities',
-  subscriptions: 'c-subscriptions',
-  goods: 'c-goods',
-  other: 'c-other',
-};
-
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 const $ = (id) => document.getElementById(id);
@@ -42,13 +32,12 @@ const el = (tag, cls, text) => {
   return node;
 };
 
-function icon(name, cls = 'ic') {
-  const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('class', cls);
-  const use = document.createElementNS(SVG_NS, 'use');
-  use.setAttribute('href', `#${name}`);
-  svg.appendChild(use);
-  return svg;
+// Смысловые значки — системные эмодзи: категории приносят своё из API,
+// остальные заданы здесь. Рисованные иконки остались только в нижней панели.
+function emo(symbol) {
+  const node = el('span', 'emo', symbol);
+  node.setAttribute('aria-hidden', 'true');
+  return node;
 }
 
 // Пастельный цвет категории — подложкой под иконку, а не заливкой в упор.
@@ -274,7 +263,7 @@ function operationRow(operation) {
   badge.style.background = contribution
     ? tint('#2f9c5c', 0.16)
     : tint(category ? category.color : '#8e8d88', 0.28);
-  badge.appendChild(icon(contribution ? 'i-wallet' : CAT_ICON[operation.category] || 'c-other'));
+  badge.appendChild(emo(contribution ? '💰' : category ? category.emoji : '📦'));
 
   const main = el('div', 'op-main');
   main.appendChild(el('div', 'op-title', contribution
@@ -295,16 +284,16 @@ function operationRow(operation) {
   if (operation.can_edit) {
     const actions = el('div', 'op-actions');
 
-    const edit = el('button', 'mini-btn');
+    const edit = el('button', 'mini-btn edit');
     edit.type = 'button';
     edit.title = 'Изменить';
-    edit.appendChild(icon('i-pencil'));
+    edit.appendChild(emo('✏️'));
     edit.onclick = () => startEdit(operation);
 
     const remove = el('button', 'mini-btn danger');
     remove.type = 'button';
     remove.title = 'Удалить';
-    remove.appendChild(icon('i-trash'));
+    remove.appendChild(emo('🗑️'));
     remove.onclick = () => removeOperation(operation);
 
     actions.append(edit, remove);
@@ -346,7 +335,7 @@ function renderCategories() {
 
     const badge = el('div', 'cat-ic');
     badge.style.background = tint(category.color, 0.32);
-    badge.appendChild(icon(CAT_ICON[category.code] || 'c-other'));
+    badge.appendChild(emo(category.emoji));
 
     button.append(badge, el('span', null, category.title));
     button.onclick = () => {

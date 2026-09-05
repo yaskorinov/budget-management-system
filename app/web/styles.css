@@ -2,28 +2,20 @@
    Общий бюджет — мини-приложение.
    Язык интерфейса: тёплый холст, белые карточки с большим радиусом, один
    кислотный акцент на действиях и «денежный» тёмно-зелёный блок под остаток.
+   Шрифт системный: на iOS это San Francisco, на остальных — их системный
+   гротеск. Смысловые иконки — системные эмодзи (на iOS Apple Color Emoji);
+   рисованные остались только в нижней панели, где нужна залитая версия.
    Цвета категорий (пастель) приходят из API и используются только на данных —
    в тексте и элементах управления их нет.
    ------------------------------------------------------------------------- */
 
-@font-face {
-  font-family: Inter;
-  src: url("/fonts/inter-regular.woff2") format("woff2");
-  font-weight: 400; font-style: normal; font-display: swap;
-}
-@font-face {
-  font-family: Inter;
-  src: url("/fonts/inter-semibold.woff2") format("woff2");
-  font-weight: 600; font-style: normal; font-display: swap;
-}
-@font-face {
-  font-family: Inter;
-  src: url("/fonts/inter-bold.woff2") format("woff2");
-  font-weight: 700; font-style: normal; font-display: swap;
-}
-
 :root {
   color-scheme: light;
+
+  --ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+        "Helvetica Neue", "Segoe UI", Roboto, system-ui, sans-serif;
+  --emoji: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji",
+           "Segoe UI Symbol", sans-serif;
 
   --bg: #f1f0ea;
   --card: #ffffff;
@@ -42,6 +34,14 @@
 
   --good: #2f9c5c;
   --bad: #d95745;
+  --edge-edit: rgba(42, 120, 214, .45);
+  --edge-del: rgba(217, 87, 69, .5);
+
+  /* Нижняя панель: стекло поверх контента и подсветка выбранной вкладки. */
+  --bar: rgba(255, 255, 255, .78);
+  --bar-solid: #ffffff;
+  --bar-line: rgba(20, 22, 15, .08);
+  --tint: var(--forest);
 
   --r-xl: 30px;
   --r-lg: 22px;
@@ -49,10 +49,11 @@
   --r-sm: 11px;
 
   --shadow: 0 1px 2px rgba(20, 22, 15, .05), 0 10px 28px rgba(20, 22, 15, .05);
-  --shadow-up: 0 -6px 24px rgba(20, 22, 15, .08);
+  --shadow-bar: 0 8px 30px rgba(20, 22, 15, .16);
 
   --col: 520px;
-  --tabbar: 68px;
+  --tabbar: 58px;
+  --tabbar-gap: 10px;
 }
 
 /* Тёмная тема системы, но выбранная в Telegram светлая её перебивает. */
@@ -67,8 +68,14 @@
     --ink-2: #adafa3;
     --ink-3: #7e8076;
     --forest: #17331f;
+    --edge-edit: rgba(75, 155, 240, .55);
+    --edge-del: rgba(230, 103, 103, .55);
+    --bar: rgba(30, 33, 27, .78);
+    --bar-solid: #1e211b;
+    --bar-line: rgba(255, 255, 255, .09);
+    --tint: var(--lime);
     --shadow: 0 1px 2px rgba(0, 0, 0, .5);
-    --shadow-up: 0 -6px 24px rgba(0, 0, 0, .5);
+    --shadow-bar: 0 8px 30px rgba(0, 0, 0, .5);
   }
 }
 
@@ -82,8 +89,14 @@
   --ink-2: #adafa3;
   --ink-3: #7e8076;
   --forest: #17331f;
+  --edge-edit: rgba(75, 155, 240, .55);
+  --edge-del: rgba(230, 103, 103, .55);
+  --bar: rgba(30, 33, 27, .78);
+  --bar-solid: #1e211b;
+  --bar-line: rgba(255, 255, 255, .09);
+  --tint: var(--lime);
   --shadow: 0 1px 2px rgba(0, 0, 0, .5);
-  --shadow-up: 0 -6px 24px rgba(0, 0, 0, .5);
+  --shadow-bar: 0 8px 30px rgba(0, 0, 0, .5);
 }
 
 * { box-sizing: border-box; }
@@ -95,7 +108,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font: 400 15px/1.45 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font: 400 15px/1.45 var(--ui);
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
 }
@@ -105,24 +118,37 @@ button { cursor: pointer; }
 
 .sprite { display: none; }
 
-/* Иконки: линия, скруглённые концы, цвет — от текста. */
+/* Эмодзи — своим шрифтом: иначе часть символов уедет в чёрно-белый рисунок. */
+.emo {
+  font-family: var(--emoji);
+  font-style: normal; line-height: 1;
+}
+
+/* Служебные знаки (крестик, стрелка) — обычный текст, а не картинка. */
+.glyph { font-size: 1.05em; line-height: 1; }
+
+.caret {
+  width: 7px; height: 7px; flex: none;
+  border-right: 1.8px solid var(--ink-3);
+  border-bottom: 1.8px solid var(--ink-3);
+  border-radius: 1px;
+  transform: translateY(-2px) rotate(45deg);
+}
+
+/* Иконки нижней панели. */
 .ic {
-  width: 22px; height: 22px; flex: none;
+  width: 25px; height: 25px; flex: none;
   fill: none; stroke: currentColor; stroke-width: 1.7;
   stroke-linecap: round; stroke-linejoin: round;
 }
 .ic .dots { stroke-width: 2.6; }
-.ic-14 { width: 14px; height: 14px; stroke-width: 2; }
-.ic-18 { width: 18px; height: 18px; }
-.ic-26 { width: 26px; height: 26px; stroke-width: 2; }
+.ic-fill { fill: currentColor; stroke: none; }
 
 .eyebrow {
   display: block;
   font-size: 10.5px; font-weight: 600; letter-spacing: .13em;
   text-transform: uppercase; color: var(--ink-3);
 }
-
-.num { font-variant-numeric: tabular-nums; }
 
 /* ------------------------------------------------------------------ вход */
 
@@ -169,7 +195,7 @@ button { cursor: pointer; }
 
 #app {
   max-width: var(--col); margin: 0 auto;
-  padding: 0 16px calc(var(--tabbar) + 34px + env(safe-area-inset-bottom));
+  padding: 0 16px calc(var(--tabbar) + var(--tabbar-gap) + 34px + env(safe-area-inset-bottom));
 }
 
 .appbar {
@@ -190,7 +216,6 @@ button { cursor: pointer; }
   font-weight: 600; font-size: 14.5px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.group-pill .ic { color: var(--ink-3); }
 .group-pill select {
   position: absolute; inset: 0; width: 100%; height: 100%;
   opacity: 0; border: none; background: none; appearance: none;
@@ -201,6 +226,7 @@ button { cursor: pointer; }
   display: grid; place-items: center;
   border-radius: 50%; border: 1px solid var(--line);
   background: var(--card); color: var(--ink-2);
+  font-size: 16px;
   box-shadow: var(--shadow);
 }
 .icon-btn:active { transform: scale(.94); }
@@ -220,12 +246,6 @@ button { cursor: pointer; }
   text-transform: uppercase; color: var(--ink-3);
 }
 .section-head { display: flex; align-items: baseline; justify-content: space-between; }
-.section-head .panel-title {
-  margin: 6px 0 16px;
-  font-size: 26px; font-weight: 700; letter-spacing: -.035em;
-}
-
-.section-title { margin-bottom: 12px; }
 .link-btn {
   display: inline-flex; align-items: center; gap: 5px;
   border: none; background: none; color: var(--ink-2);
@@ -326,9 +346,8 @@ button { cursor: pointer; }
 .op:last-child { border-bottom: none; }
 .op-icon {
   width: 40px; height: 40px; border-radius: 13px; flex: none;
-  display: grid; place-items: center; color: var(--ink);
+  display: grid; place-items: center; font-size: 19px;
 }
-.op-icon .ic { width: 21px; height: 21px; stroke-width: 1.6; }
 .op-main { flex: 1; min-width: 0; }
 .op-title {
   font-size: 14.5px; font-weight: 600;
@@ -342,13 +361,16 @@ button { cursor: pointer; }
 .op-sum { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .op.in .op-sum { color: var(--good); }
 .op-actions { display: flex; gap: 4px; justify-content: flex-end; margin-top: 4px; }
+
+/* Правка синим, удаление красным — как у кнопок бота; у эмодзи свой цвет,
+   поэтому роль показывает рамка. */
 .mini-btn {
-  width: 28px; height: 28px; display: grid; place-items: center;
-  border: 1px solid var(--line); border-radius: 9px;
-  background: var(--card); color: var(--ink-3);
+  width: 30px; height: 30px; display: grid; place-items: center;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--card); font-size: 13px;
 }
-.mini-btn .ic { width: 15px; height: 15px; }
-.mini-btn.danger { color: var(--bad); }
+.mini-btn.edit { border-color: var(--edge-edit); }
+.mini-btn.danger { border-color: var(--edge-del); }
 .mini-btn:active { transform: scale(.92); }
 
 .empty { color: var(--ink-3); text-align: center; padding: 26px 0; font-size: 14px; }
@@ -405,9 +427,9 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
 .legend-row {
   display: grid; grid-template-columns: 1fr auto;
   gap: 2px 12px; padding: 12px 0; border-bottom: 1px solid var(--line);
+  cursor: pointer; border-radius: 12px; transition: background .16s ease;
 }
 .legend-row:last-child { border-bottom: none; }
-.legend-row { cursor: pointer; border-radius: 12px; transition: background .16s ease; }
 .legend-row.pick { background: var(--sunk); box-shadow: 0 0 0 8px var(--sunk); }
 .legend-name {
   display: flex; align-items: center; gap: 9px;
@@ -428,31 +450,52 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
 
 /* ------------------------------------------------------- низ экрана */
 
+/* Панель как на iOS: полупрозрачное стекло, отступ от краёв, у выбранной
+   вкладки залитая иконка и мягкая подсветка под ней. */
 .tabbar {
-  position: fixed; left: 50%; bottom: 0; transform: translateX(-50%);
-  width: 100%; max-width: var(--col); z-index: 9;
+  position: fixed; left: 50%; z-index: 9;
+  bottom: calc(var(--tabbar-gap) + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: calc(100% - 24px); max-width: calc(var(--col) - 24px);
+  height: var(--tabbar); padding: 0 4px;
   display: flex; align-items: center;
-  height: calc(var(--tabbar) + env(safe-area-inset-bottom));
-  padding: 0 8px env(safe-area-inset-bottom);
-  background: var(--card); border-top: 1px solid var(--line);
-  border-radius: var(--r-lg) var(--r-lg) 0 0;
-  box-shadow: var(--shadow-up);
+  border-radius: 26px;
+  background: var(--bar);
+  border: 1px solid var(--bar-line);
+  box-shadow: var(--shadow-bar);
+  backdrop-filter: saturate(180%) blur(22px);
+  -webkit-backdrop-filter: saturate(180%) blur(22px);
 }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .tabbar { background: var(--bar-solid); }
+}
+
 .tabbtn {
-  flex: 1; border: none; background: none; color: var(--ink-3);
-  display: flex; flex-direction: column; align-items: center; gap: 3px;
-  padding: 8px 0; font-size: 10px; font-weight: 600;
+  position: relative; flex: 1;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  border: none; background: none; color: var(--ink-3);
+  padding: 7px 0 6px;
+  font-size: 10px; font-weight: 500; letter-spacing: -.01em;
 }
-.tabbtn .ic { width: 23px; height: 23px; }
-.tabbtn.active { color: var(--ink); }
+.tabbtn .ic-fill { display: none; }
+.tabbtn.active { color: var(--tint); }
+.tabbtn.active .ic-line { display: none; }
+.tabbtn.active .ic-fill { display: block; }
+.tabbtn.active::before {
+  content: ""; position: absolute; top: 3px;
+  width: 46px; height: 26px; border-radius: 999px;
+  background: var(--tint); opacity: .18; filter: blur(8px);
+}
+.tabbtn:active { transform: scale(.94); }
 
 .fab {
   position: fixed; z-index: 10;
   right: max(20px, calc(50vw - var(--col) / 2 + 20px));
-  bottom: calc(var(--tabbar) + 18px + env(safe-area-inset-bottom));
-  width: 58px; height: 58px; border-radius: 50%; border: none;
+  bottom: calc(var(--tabbar) + var(--tabbar-gap) + 14px + env(safe-area-inset-bottom));
+  width: 56px; height: 56px; border-radius: 50%; border: none;
   display: grid; place-items: center;
   background: var(--lime); color: #14301f;
+  font-size: 30px; font-weight: 300; line-height: 1; padding-bottom: 3px;
   box-shadow: 0 8px 22px rgba(20, 22, 15, .18);
 }
 .fab:active { transform: scale(.93); }
@@ -494,6 +537,7 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
   padding: 11px 8px; border: none; border-radius: 999px;
   background: none; color: var(--ink-2); font-size: 14px; font-weight: 600;
 }
+.sw .emo { font-size: 15px; }
 .sw.active { background: var(--ink); color: var(--bg); }
 
 .field { display: block; margin-bottom: 18px; }
@@ -511,8 +555,8 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
 .magic-btn {
   position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
   width: 38px; height: 38px; border-radius: 12px; border: none;
-  display: grid; place-items: center;
-  background: var(--lime); color: #14301f;
+  display: grid; place-items: center; font-size: 17px;
+  background: var(--lime);
 }
 .magic-btn:disabled { opacity: .5; }
 
@@ -533,9 +577,11 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   text-align: center; color: var(--ink-2);
 }
-.cat-ic { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; color: var(--ink); }
-.cat-ic .ic { width: 19px; height: 19px; }
-.cat span { font-size: 11px; font-weight: 600; line-height: 1.2; }
+.cat-ic {
+  width: 34px; height: 34px; border-radius: 11px;
+  display: grid; place-items: center; font-size: 17px;
+}
+.cat span:not(.emo) { font-size: 11px; font-weight: 600; line-height: 1.2; }
 .cat.active { border-color: var(--ink); color: var(--ink); }
 
 .chips { display: flex; flex-wrap: wrap; gap: 7px; }
@@ -566,7 +612,7 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
 
 .toast {
   position: fixed; left: 50%; transform: translateX(-50%);
-  bottom: calc(var(--tabbar) + 84px + env(safe-area-inset-bottom));
+  bottom: calc(var(--tabbar) + var(--tabbar-gap) + 82px + env(safe-area-inset-bottom));
   z-index: 30; max-width: calc(var(--col) - 40px);
   background: var(--ink); color: var(--bg);
   padding: 11px 18px; border-radius: 999px;
