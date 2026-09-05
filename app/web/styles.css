@@ -379,10 +379,18 @@ button { cursor: pointer; }
 .chart { margin: 0; padding: 20px 16px 16px; text-align: center; }
 .donut-wrap { position: relative; width: min(260px, 68vw); margin: 0 auto; }
 #donut { display: block; width: 100%; height: auto; overflow: visible; }
-#donut .seg-arc { transition: opacity .18s ease; cursor: pointer; }
+#donut .seg-arc {
+  cursor: pointer;
+  transition: stroke-dasharray .55s cubic-bezier(.22, 1, .36, 1), opacity .18s ease;
+}
 #donut.has-pick .seg-arc { opacity: .3; }
 #donut.has-pick .seg-arc.pick { opacity: 1; }
 #donut .track { stroke: var(--sunk); }
+
+/* Смена периода перерисовывает данные без перехода экрана, поэтому итог
+   и легенда проявляются заново — иначе подмена чисел проходит незаметно. */
+.donut-center.fade { animation: fadeUp .34s ease both; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } }
 
 .donut-center {
   position: absolute; inset: 0;
@@ -401,6 +409,7 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
 
 .legend { margin-top: 10px; padding: 6px 16px; }
 .legend-row {
+  animation: rowIn .34s ease both;
   display: grid; grid-template-columns: 1fr auto;
   gap: 2px 12px; padding: 12px 0; border-bottom: 1px solid var(--line);
   cursor: pointer; transition: background .16s ease;
@@ -410,7 +419,8 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
   background: var(--card-2); border-radius: 12px;
   box-shadow: 0 0 0 8px var(--card-2); border-bottom-color: transparent;
 }
-.legend-name { display: flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 600; min-width: 0; }
+@keyframes rowIn { from { opacity: 0; transform: translateY(8px); } }
+.legend-name { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; min-width: 0; }
 .legend-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .legend .dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
 .legend-sum { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }

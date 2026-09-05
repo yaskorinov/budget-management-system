@@ -46,8 +46,8 @@
   <div class="auth-hero">
     <div class="auth-badge"><span>₽</span></div>
     <h1 class="auth-title">Общий бюджет</h1>
-    <p class="auth-lead">Скидываемся в фонд, тратим из него — кто кому сколько
-      должен, считается само.</p>
+    <p class="auth-lead">Складываемся в общий фонд и тратим из него.
+      Кто кому сколько должен — посчитает бот.</p>
   </div>
   <div class="auth-card">
     <p id="auth-text" class="auth-status">Проверяем вход…</p>
@@ -90,7 +90,7 @@
             </div>
           </div>
 
-          <h2 class="section-title">Кто как стоит</h2>
+          <h2 class="section-title">Баланс участников</h2>
           <div id="balances" class="balances"></div>
         </div>
 
@@ -122,8 +122,8 @@
         <button class="tt" data-mode="people">Люди</button>
       </div>
       <div class="pills" id="period-switch">
-        <button class="pill active" data-period="month">Месяц</button>
-        <button class="pill" data-period="prev_month">Прошлый</button>
+        <button class="pill active" data-period="month">Этот месяц</button>
+        <button class="pill" data-period="prev_month">Прошлый месяц</button>
         <button class="pill" data-period="week">Неделя</button>
         <button class="pill" data-period="all">Всё время</button>
       </div>
@@ -234,7 +234,7 @@
     </div>
 
     <div class="sheet-foot">
-      <button type="button" id="cancel-edit" class="ghost-btn" hidden>Отменить правку</button>
+      <button type="button" id="cancel-edit" class="ghost-btn" hidden>Отменить</button>
       <button type="submit" id="submit" class="primary-btn">Записать покупку</button>
     </div>
   </form>

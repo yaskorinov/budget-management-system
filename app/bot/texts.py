@@ -181,7 +181,7 @@ def summary_text(
     if debtors:
         parts.append(
             blocks(
-                bold("🔴 Нужно доложить"),
+                bold("🔴 Нужно внести"),
                 bullets(
                     *[
                         join(item.user.short_name, " — ", bold(money(-item.balance)))

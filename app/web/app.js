@@ -64,7 +64,7 @@ function tint(hex, alpha) {
 function money(cents, { short = false } = {}) {
   const rubles = cents / 100;
   if (short && Math.abs(rubles) >= 100000) {
-    return `${(rubles / 1000).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} тыс ₽`;
+    return `${(rubles / 1000).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} тыс. ₽`;
   }
   const value = rubles.toLocaleString('ru-RU', {
     minimumFractionDigits: cents % 100 ? 2 : 0,
@@ -248,7 +248,7 @@ function renderBalances(summary) {
 
     card.append(top);
     card.appendChild(el('div', 'balance-note',
-      item.balance > 0 ? 'переплатил' : item.balance < 0 ? 'нужно доложить' : 'в расчёте'));
+      item.balance > 0 ? 'переплата' : item.balance < 0 ? 'долг' : 'в расчёте'));
     card.appendChild(el('div', `pill-sum ${sign || 'flat'}`, signed(item.balance)));
     box.appendChild(card);
   });
@@ -437,7 +437,7 @@ function startEdit(operation) {
   $('title').value = operation.title || '';
   $('raw-text').value = '';
   $('add-status').textContent = '';
-  $('sheet-title').textContent = 'Правка операции';
+  $('sheet-title').textContent = 'Изменить операцию';
   $('cancel-edit').hidden = false;
 
   updateKindFields();
@@ -544,6 +544,11 @@ async function loadStats() {
   renderLegend();
   showCenter();
 
+  const center = document.querySelector('.donut-center');
+  center.classList.remove('fade');
+  void center.offsetWidth;
+  center.classList.add('fade');
+
   $('chart-total').textContent = state.stats.total
     ? state.stats.period_title
     : `${state.stats.period_title}: расходов нет`;
@@ -588,12 +593,18 @@ function drawDonut() {
     const arc = ring('seg-arc');
     arc.setAttribute('stroke', slice.color);
     arc.setAttribute('stroke-linecap', rounded ? 'round' : 'butt');
-    arc.setAttribute('stroke-dasharray', `${drawn} ${circumference - drawn}`);
+    arc.style.strokeDasharray = `0 ${circumference}`;
+    arc.style.transitionDelay = `${index * 45}ms`;
     arc.setAttribute('transform',
       `rotate(${((offset + gap / 2 + (rounded ? RING.width / 2 : 0)) / circumference) * 360 - 90} 100 100)`);
     arc.dataset.index = String(index);
     arc.addEventListener('click', () => pickSlice(index));
     svg.appendChild(arc);
+
+    // Сегмент вырастает от нуля: длину ставим после того, как браузер учёл
+    // стартовое состояние, иначе переходу не от чего отталкиваться.
+    void arc.getBoundingClientRect();
+    arc.style.strokeDasharray = `${drawn} ${circumference - drawn}`;
 
     offset += length;
   });
@@ -643,6 +654,7 @@ function renderLegend() {
   stats.slices.forEach((slice, index) => {
     const row = el('div', 'legend-row');
     row.dataset.index = String(index);
+    row.style.animationDelay = `${index * 45}ms`;
     row.onclick = () => pickSlice(index);
 
     const name = el('div', 'legend-name');
@@ -657,7 +669,8 @@ function renderLegend() {
     bar.appendChild(fill);
 
     row.append(name, el('div', 'legend-sum', money(slice.value)), bar,
-      el('div', 'legend-share', `${((slice.value / stats.total) * 100).toFixed(1)}% от расходов`));
+      el('div', 'legend-share',
+        `${((slice.value / stats.total) * 100).toFixed(1).replace('.', ',')}% расходов`));
     box.appendChild(row);
   });
 }
