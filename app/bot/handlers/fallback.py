@@ -21,13 +21,19 @@ async def private_text(
 ) -> None:
     amount, _ = parse_amount(message.text)
     if amount is None:
+        active = await service.resolve_active_group(session, user)
+        second = (
+            texts.join("или «отдал 500» — вернуть долг участнику.")
+            if active and active.is_split
+            else texts.join("или «внёс 5000» для пополнения фонда.")
+        )
         await answer_rich(message, 
             texts.lines(
                 texts.join(
                     "Не понял. Напишите покупку с суммой — ",
                     texts.code("молоко хлеб 850"),
                 ),
-                texts.join("или «внёс 5000» для пополнения фонда."),
+                second,
                 texts.italic("Меню: /start · Все команды: /help"),
             ),
             reply_markup=keyboards.back_home_kb(),

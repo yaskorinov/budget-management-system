@@ -264,6 +264,13 @@ def operations_rows(operations: list[Operation]) -> Rich:
                 " · ", italic(operation.author.short_name, ", ",
                               periods.format_date(operation.occurred_at)),
             )
+        elif operation.is_transfer:
+            recipient = operation.recipient
+            what = join(
+                "💸 возврат → ", recipient.short_name if recipient else "—", " · ",
+                italic(operation.author.short_name, ", ",
+                       periods.format_date(operation.occurred_at)),
+            )
         else:
             what = join(
                 "💰 взнос в фонд · ",

@@ -34,7 +34,9 @@ MAX_AUDIO_BYTES = 5 * 1024 * 1024  # голосовые длиннее пары 
 
 
 @router.message(Command("voice"))
-async def voice_command(message: Message) -> None:
+async def voice_command(
+    message: Message, session: AsyncSession, user: User
+) -> None:
     if not settings.llm_enabled or not settings.llm_voice_model:
         await answer_rich(
             message,
@@ -42,6 +44,8 @@ async def voice_command(message: Message) -> None:
         )
         return
 
+    group = await resolve_group(session, message, user)
+    split = bool(group and group.is_split)
     await answer_rich(
         message,
         texts.blocks(
@@ -49,7 +53,10 @@ async def voice_command(message: Message) -> None:
             texts.join("Запишите голосовое — я расшифрую и запишу операцию."),
             texts.bullets(
                 texts.join(texts.italic("«молоко хлеб восемьсот пятьдесят»"), " — покупка"),
-                texts.join(texts.italic("«внёс пять тысяч»"), " — взнос в фонд"),
+                texts.join(
+                    texts.italic("«внёс пять тысяч»"),
+                    " — вернуть долг" if split else " — взнос в фонд",
+                ),
             ),
             texts.italic("Расшифровку покажу — если ослышусь, поправите кнопками на карточке"),
         ),
