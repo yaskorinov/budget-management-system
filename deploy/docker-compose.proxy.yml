@@ -10,6 +10,10 @@
 #
 #   docker compose -f docker-compose.yml -f deploy/docker-compose.proxy.yml up -d
 #
+# Чтобы не набирать это каждый раз, добавьте в .env строку
+#   COMPOSE_FILE=docker-compose.yml:deploy/docker-compose.proxy.yml
+# — тогда обычный docker compose up поднимает нужную связку сам.
+#
 # В host-режиме порт не публикуется — приложение само занимает HOST:PORT
 # на хосте. Слушаем loopback, наружу пускает nginx (см. deploy/nginx.conf).
 services:
