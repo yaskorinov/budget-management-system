@@ -510,15 +510,18 @@ async function loadOperations() {
     `/groups/${state.groupId}/operations?scope=${state.scope}&limit=50`
   );
   renderOperations($('ops-list'), state.operations);
-  renderOperations($('recent'), state.operations.slice(0, 4));
+  renderOperations($('recent'), state.operations.slice(0, 4), { compact: true });
 }
 
-function operationRow(operation) {
+// На главной операции — предпросмотр: сумма встаёт в строку с названием,
+// а кнопки правки живут во вкладке «Операции». Иначе четыре карточки
+// занимают весь экран.
+function operationRow(operation, { compact = false } = {}) {
   const category = state.categories.find((item) => item.code === operation.category);
   const contribution = operation.kind === 'contribution';
   const transfer = operation.kind === 'transfer';
 
-  const row = el('div', `op${contribution ? ' in' : ''}`);
+  const row = el('div', `op${contribution ? ' in' : ''}${compact ? ' compact' : ''}`);
 
   const badge = el('div', 'op-icon');
   const color = transfer ? '#0a84ff'
@@ -546,9 +549,16 @@ function operationRow(operation) {
     : '';
   main.appendChild(el('div', 'op-meta', `${operation.author} · ${when}${people}`));
 
+  const sum = el('div', 'op-sum',
+    contribution ? `+${money(operation.amount)}` : money(operation.amount));
+
+  if (compact) {
+    row.append(badge, main, sum);
+    return row;
+  }
+
   const foot = el('div', 'op-foot');
-  foot.appendChild(el('div', 'op-sum',
-    contribution ? `+${money(operation.amount)}` : money(operation.amount)));
+  foot.appendChild(sum);
 
   if (operation.can_edit) {
     const actions = el('div', 'op-actions');
@@ -574,13 +584,14 @@ function operationRow(operation) {
   return row;
 }
 
-function renderOperations(box, operations) {
+function renderOperations(box, operations, options = {}) {
   box.innerHTML = '';
   if (!operations.length) {
     box.appendChild(el('div', 'empty', 'Пока нет операций'));
     return;
   }
-  operations.forEach((operation) => box.appendChild(operationRow(operation)));
+  operations.forEach((operation) =>
+    box.appendChild(operationRow(operation, options)));
 }
 
 async function removeOperation(operation) {
@@ -1129,6 +1140,16 @@ function applyInsets() {
   const bottom = (safe.bottom || 0) + (content.bottom || 0);
   if (top) root.setProperty('--safe-top', `${top}px`);
   if (bottom) root.setProperty('--safe-bottom', `${bottom}px`);
+
+  // Вебвью Telegram бывает выше видимой части экрана — тогда закреплённый
+  // док оказывается ниже сгиба, и до него приходится долистывать. Поднимаем
+  // его на эту разницу; в обычном браузере она нулевая.
+  if (!tg.isExpanded) {
+    try { tg.expand(); } catch (_) { /* старый клиент */ }
+  }
+  const stable = tg.viewportStableHeight || 0;
+  const gap = stable ? Math.max(0, Math.round(window.innerHeight - stable)) : 0;
+  root.setProperty('--viewport-gap', `${gap}px`);
 }
 
 if (tg) {

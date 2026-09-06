@@ -118,6 +118,10 @@
   /* Telegram отдаёт свои отступы в app.js; env() — запасной вариант. */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* Насколько вебвью выше видимой области: в браузере ноль, в Telegram
+     бывает больше нуля — на столько приподнимаем док. */
+  --viewport-gap: 0px;
 }
 
 * { box-sizing: border-box; }
@@ -303,7 +307,8 @@ button:active { transform: scale(.96); }
 #app {
   max-width: var(--wide); margin: 0 auto;
   padding: var(--safe-top) var(--pad)
-           calc(var(--tabbar) + var(--dock-bottom) + 22px + var(--safe-bottom));
+           calc(var(--tabbar) + var(--dock-bottom) + 22px + var(--safe-bottom)
+                + var(--viewport-gap));
 }
 
 /* Парящая шапка: сплошной плашки нет, есть две стеклянные пилюли. Контент
@@ -555,6 +560,13 @@ button:active { transform: scale(.96); }
 
 /* ------------------------------------------------------------- операции */
 
+/* Предпросмотр на главной: одна строка вместо карточки в три яруса. */
+.op.compact { align-items: center; padding: 10px 12px; }
+.op.compact .op-meta { margin-top: 1px; }
+.op.compact .op-icon { width: 38px; height: 38px; border-radius: var(--r-xs); }
+.op.compact .op-icon .ic { width: 19px; height: 19px; }
+.op.compact .op-sum { flex: none; }
+
 .ops { display: grid; gap: 10px; }
 .op {
   display: flex; align-items: flex-start; gap: 12px;
@@ -732,7 +744,7 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
    на ширину ячейки и слегка растягиваясь на полпути. */
 .dock {
   position: fixed; left: 50%; z-index: 9;
-  bottom: calc(var(--dock-bottom) + var(--safe-bottom));
+  bottom: calc(var(--dock-bottom) + var(--safe-bottom) + var(--viewport-gap));
   transform: translateX(-50%);
   display: flex; align-items: center; gap: 12px;
   /* Ширина по содержимому, но не шире экрана: без width блок считался бы от
