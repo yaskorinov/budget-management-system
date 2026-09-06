@@ -65,39 +65,59 @@ def authorize_url(state: str) -> str:
 
 async def exchange(code: str) -> str:
     """Код авторизации → access token."""
-    async with httpx.AsyncClient(timeout=TIMEOUT, proxy=settings.proxy_url or None) as client:
-        response = await client.post(
-            TOKEN_URL,
-            data={
-                "grant_type": "authorization_code",
-                "code": code,
-                "client_id": settings.yandex_client_id,
-                "client_secret": settings.yandex_client_secret,
-            },
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
+    try:
+        async with httpx.AsyncClient(
+            timeout=TIMEOUT, proxy=settings.proxy_url or None
+        ) as client:
+            response = await client.post(
+                TOKEN_URL,
+                data={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "client_id": settings.yandex_client_id,
+                    "client_secret": settings.yandex_client_secret,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+    except httpx.HTTPError as exc:
+        # Сеть или прокси: человека всё равно надо вернуть в приложение
+        # с понятной строкой, а не с пятисоткой.
+        log.warning("Яндекс недоступен: %s", exc)
+        raise YandexError("Яндекс сейчас недоступен, попробуйте ещё раз") from exc
     if response.is_error:
         log.warning("Яндекс не выдал токен: %s %s", response.status_code, response.text[:200])
         raise YandexError("Яндекс не подтвердил вход")
 
-    token = response.json().get("access_token")
+    try:
+        token = response.json().get("access_token")
+    except ValueError as exc:
+        raise YandexError("Яндекс вернул неожиданный ответ") from exc
     if not token:
         raise YandexError("Яндекс не вернул токен доступа")
     return token
 
 
 async def profile(access_token: str) -> YandexProfile:
-    async with httpx.AsyncClient(timeout=TIMEOUT, proxy=settings.proxy_url or None) as client:
-        response = await client.get(
-            INFO_URL,
-            params={"format": "json"},
-            headers={"Authorization": f"OAuth {access_token}"},
-        )
+    try:
+        async with httpx.AsyncClient(
+            timeout=TIMEOUT, proxy=settings.proxy_url or None
+        ) as client:
+            response = await client.get(
+                INFO_URL,
+                params={"format": "json"},
+                headers={"Authorization": f"OAuth {access_token}"},
+            )
+    except httpx.HTTPError as exc:
+        log.warning("Профиль недоступен: %s", exc)
+        raise YandexError("Яндекс сейчас недоступен, попробуйте ещё раз") from exc
     if response.is_error:
         log.warning("Профиль не получен: %s %s", response.status_code, response.text[:200])
         raise YandexError("Не удалось получить профиль Яндекса")
 
-    data = response.json()
+    try:
+        data = response.json()
+    except ValueError as exc:
+        raise YandexError("Яндекс вернул неожиданный ответ") from exc
     user_id = str(data.get("id") or "")
     if not user_id:
         raise YandexError("Яндекс не вернул идентификатор")
