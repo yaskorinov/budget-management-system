@@ -1,24 +1,37 @@
 """REST API для мини-аппы и браузерной версии."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import FileResponse
+from urllib.parse import quote
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api import schemas
-from app.api.auth import current_user, issue_session, verify_init_data
+from app.api import schemas, yandex
+from app.api.auth import current_user, issue_session, read_session, verify_init_data
 from app.config import settings
 from app.core import categories as cat
 from app.core import periods, reports, service
 from app.core.classifier import parse_purchase
 from app.db.base import get_session
-from app.db.models import Group, Operation, User
+from app.db.models import LINK, Group, Operation, User
 
 router = APIRouter()
 
 
+def invite_url(token: str) -> str:
+    return f"{settings.public_base_url.rstrip('/')}/?invite={token}"
+
+
 def _user_out(user: User) -> schemas.UserOut:
-    return schemas.UserOut(id=user.id, name=user.display_name, username=user.username)
+    return schemas.UserOut(
+        id=user.id,
+        name=user.display_name,
+        username=user.username,
+        is_guest=user.is_guest,
+        has_telegram=user.tg_user_id is not None,
+        has_yandex=user.yandex_id is not None,
+    )
 
 
 def _group_out(group: Group) -> schemas.GroupOut:
@@ -362,6 +375,177 @@ async def categorize(
         title=parsed.title,
         source=parsed.source,
     )
+
+
+
+
+# --------------------------------------------------------------------------- #
+#  Приглашения, Яндекс ID и привязка Telegram
+# --------------------------------------------------------------------------- #
+
+
+async def _session_user(authorization: str, session: AsyncSession) -> User | None:
+    """Пользователь по заголовку, если он есть. Для входа по приглашению:
+    уже вошедший просто вступает в бюджет, новому заводим гостя."""
+    token = authorization.removeprefix("Bearer ").strip()
+    user_id = read_session(token) if token else None
+    return await session.get(User, user_id) if user_id else None
+
+
+@router.get("/auth/invite/{token}", response_model=schemas.InviteInfoOut)
+async def invite_info(token: str, session: AsyncSession = Depends(get_session)):
+    """Что за приглашение — показываем до входа, чтобы человек понимал, куда идёт."""
+    invite = await service.get_invite(session, token)
+    if invite is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Приглашение недействительно")
+    inviter = await session.get(User, invite.created_by)
+    return schemas.InviteInfoOut(
+        group_title=invite.group.title,
+        mode=invite.group.mode,
+        inviter=inviter.short_name if inviter else "",
+        expires_at=invite.expires_at,
+    )
+
+
+@router.post("/auth/invite", response_model=schemas.AuthOut)
+async def accept_invite(
+    payload: schemas.InviteAcceptIn,
+    authorization: str = Header(default=""),
+    session: AsyncSession = Depends(get_session),
+):
+    invite = await service.get_invite(session, payload.token)
+    if invite is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Приглашение недействительно")
+
+    user = await _session_user(authorization, session)
+    if user is None:
+        user = await service.create_guest(session, name=payload.name or "")
+    await service.accept_invite(session, invite=invite, user=user)
+    return await _auth_payload(session, user)
+
+
+@router.post("/groups/{group_id}/invite", response_model=schemas.InviteOut)
+async def make_invite(
+    group_id: int,
+    user: User = Depends(current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    group = await _group_for(session, user, group_id)
+    invite = await service.create_invite(
+        session, group_id=group.id, created_by=user.id
+    )
+    return schemas.InviteOut(
+        url=invite_url(invite.token),
+        expires_at=invite.expires_at,
+        uses=invite.uses,
+        max_uses=invite.max_uses,
+    )
+
+
+@router.get("/auth/yandex/url", response_model=schemas.RedirectOut)
+async def yandex_login_url(invite: str = ""):
+    """Адрес страницы согласия. Ходит по нему сам браузер."""
+    if not settings.yandex_enabled:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Вход через Яндекс не настроен")
+    state = yandex.pack_state({"invite": invite} if invite else {})
+    return schemas.RedirectOut(url=yandex.authorize_url(state))
+
+
+@router.post("/link/yandex", response_model=schemas.RedirectOut)
+async def yandex_link_url(user: User = Depends(current_user)):
+    """То же согласие, но с пометкой «привязать к этому аккаунту».
+
+    Идентификатор кладём в подписанный state, а не в адресную строку: токен
+    сессии в истории браузера и в Referer — лишний риск.
+    """
+    if not settings.yandex_enabled:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Вход через Яндекс не настроен")
+    state = yandex.pack_state({"uid": user.id})
+    return schemas.RedirectOut(url=yandex.authorize_url(state))
+
+
+@router.post("/link/telegram", response_model=schemas.LinkOut)
+async def telegram_link_code(
+    request: Request,
+    user: User = Depends(current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    if user.tg_user_id is not None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Telegram уже привязан")
+
+    code = await service.create_login_token(
+        session, user.id, ttl_minutes=15, purpose=LINK
+    )
+    username = ""
+    bot = getattr(request.app.state, "bot", None)
+    if bot is not None:
+        try:
+            username = (await bot.me()).username or ""
+        except Exception:  # noqa: BLE001 — без имени просто покажем код
+            username = ""
+    return schemas.LinkOut(
+        code=code,
+        url=f"https://t.me/{username}?start=link_{code}" if username else "",
+    )
+
+
+# Возврат от Яндекса — обычная навигация браузера, поэтому без префикса /api.
+oauth_router = APIRouter()
+
+
+@oauth_router.get("/auth/yandex/callback")
+async def yandex_callback(
+    code: str = "",
+    state: str = "",
+    error: str = "",
+    session: AsyncSession = Depends(get_session),
+):
+    """Меняем код на токен, находим или заводим аккаунт и возвращаем в приложение.
+
+    Обратно уходим одноразовым токеном входа: он уже умеет разбираться веб-частью,
+    и в адресной строке не остаётся ничего долгоживущего.
+    """
+    def back(message: str) -> RedirectResponse:
+        return RedirectResponse(f"/?auth_error={quote(message)}", status_code=303)
+
+    if error or not code:
+        return back("Вход через Яндекс отменён")
+
+    data = yandex.read_state(state) or {}
+    try:
+        access = await yandex.exchange(code)
+        profile = await yandex.profile(access)
+    except yandex.YandexError as exc:
+        return back(str(exc))
+
+    linking_to = data.get("uid")
+    if linking_to:
+        user = await session.get(User, int(linking_to))
+        if user is None:
+            return back("Аккаунт не найден")
+        try:
+            await service.attach_yandex(
+                session, user=user, yandex_id=profile.id,
+                email=profile.email, name=profile.name,
+            )
+        except service.ServiceError as exc:
+            return back(str(exc))
+    else:
+        user = await service.user_by_yandex(session, profile.id)
+        if user is None:
+            user = await service.create_guest(session, name=profile.name)
+            await service.attach_yandex(
+                session, user=user, yandex_id=profile.id, email=profile.email
+            )
+            user.username = profile.login or user.username
+
+    if invite_token := data.get("invite"):
+        invite = await service.get_invite(session, invite_token)
+        if invite is not None:
+            await service.accept_invite(session, invite=invite, user=user)
+
+    login = await service.create_login_token(session, user.id, ttl_minutes=5)
+    return RedirectResponse(f"/?login={login}", status_code=303)
 
 
 charts_router = APIRouter()

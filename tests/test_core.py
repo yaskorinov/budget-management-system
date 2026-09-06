@@ -278,5 +278,77 @@ async def split_mode():
     print("режим дележа: балансы, взаимозачёт и запреты сходятся")
 
 
+
+
+async def accounts():
+    """Вход по приглашению, гостевой аккаунт и привязка личностей."""
+    async with session_scope() as s:
+        host = await service.get_or_create_user(s, tg_user_id=21, first_name="Хозяин")
+        g = await service.create_group(s, title="Общий чат", owner=host)
+        invite = await service.create_invite(s, group_id=g.id, created_by=host.id)
+
+        guest = await service.create_guest(s, name="Гостья")
+        assert guest.is_guest, "у гостя нет ни Telegram, ни Яндекса"
+        joined = await service.accept_invite(s, invite=invite, user=guest)
+        assert joined.id == g.id and guest.active_group_id == g.id
+        assert await service.is_member(s, group_id=g.id, user_id=guest.id)
+        assert invite.uses == 1
+
+        # Повторный вход того же человека счётчик не крутит.
+        await service.accept_invite(s, invite=invite, user=guest)
+        assert invite.uses == 1, "повторное открытие ссылки — не новый участник"
+
+        # Новая ссылка гасит прежнюю: это и есть отзыв.
+        again = await service.create_invite(s, group_id=g.id, created_by=host.id)
+        assert await service.get_invite(s, invite.token) is None
+        assert (await service.get_invite(s, again.token)).id == again.id
+
+        # Привязка Telegram: пустой аккаунт из бота вливается в гостевой.
+        empty = await service.get_or_create_user(s, tg_user_id=22, first_name="Новый")
+        empty_id = empty.id
+        linked = await service.link_telegram(s, web_user=guest, tg_user=empty)
+        assert linked.id == guest.id and linked.tg_user_id == 22
+        assert await service.get_user(s, empty_id) is None, "пустышка удалена"
+        assert not guest.is_guest
+
+        # Второй Telegram к тому же аккаунту не привяжешь.
+        other = await service.get_or_create_user(s, tg_user_id=23, first_name="Ещё")
+        try:
+            await service.link_telegram(s, web_user=guest, tg_user=other)
+            raise AssertionError("второй Telegram привязывать нельзя")
+        except service.ServiceError:
+            pass
+
+        # Аккаунт с историей молча не сливаем.
+        busy = await service.get_or_create_user(s, tg_user_id=24, first_name="Занятой")
+        await service.create_group(s, title="Своё", owner=busy)
+        guest2 = await service.create_guest(s, name="Второй гость")
+        try:
+            await service.link_telegram(s, web_user=guest2, tg_user=busy)
+            raise AssertionError("аккаунт с историей сливать нельзя")
+        except service.ServiceError:
+            pass
+
+        # Яндекс ID: один идентификатор — один аккаунт.
+        await service.attach_yandex(s, user=guest2, yandex_id="ya-1", email="a@ya.ru")
+        assert not guest2.is_guest and guest2.email == "a@ya.ru"
+        assert (await service.user_by_yandex(s, "ya-1")).id == guest2.id
+        guest3 = await service.create_guest(s, name="Третий")
+        try:
+            await service.attach_yandex(s, user=guest3, yandex_id="ya-1")
+            raise AssertionError("чужой Яндекс ID привязывать нельзя")
+        except service.ServiceError:
+            pass
+
+        # Протухшее и исчерпанное приглашение не работает.
+        short = await service.create_invite(s, group_id=g.id, created_by=host.id, ttl_days=0)
+        assert await service.get_invite(s, short.token) is None, "срок вышел"
+        spent = await service.create_invite(s, group_id=g.id, created_by=host.id, max_uses=1)
+        await service.accept_invite(s, invite=spent, user=guest3)
+        assert await service.get_invite(s, spent.token) is None, "лимит исчерпан"
+
+    print("аккаунты: приглашение, гость, привязка Telegram и Яндекса")
+
 asyncio.run(main())
 asyncio.run(split_mode())
+asyncio.run(accounts())

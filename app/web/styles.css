@@ -159,7 +159,7 @@ button { cursor: pointer; }
 
 /* Крупные поверхности: настоящая линза с размытием фона. */
 .pane, .card, .fund, .op, .balance, .debt, .empty, .chart, .legend,
-.auth-card, .auth-hero {
+.auth-card, .auth-hero, .link-card {
   position: relative;
   border: none;
   border-radius: var(--r-lg);
@@ -171,7 +171,7 @@ button { cursor: pointer; }
 
 /* Мелочь лежит на уже размытом родителе — ей хватает прозрачной подложки. */
 .group-pill, .icon-btn, .mini-btn, .op-sum, .cat, .chip, .avatar,
-.ghost-btn, .field input, .fund-badge {
+.ghost-btn, .field input, .fund-badge, .pill-btn, .invite-out input {
   border: none;
   background: var(--capsule);
   box-shadow: var(--capsule-edge);
@@ -181,7 +181,7 @@ button { cursor: pointer; }
    иначе текст ляжет прямо на цветное облако. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .pane, .card, .fund, .op, .balance, .debt, .empty, .chart, .legend,
-  .auth-card, .auth-hero, .tabbar, .dock-btn, .sheet-card, .toast,
+  .auth-card, .auth-hero, .link-card, .tabbar, .dock-btn, .sheet-card, .toast,
   .appbar .group-pill, .appbar .icon-btn {
     background: var(--glass-solid);
   }
@@ -274,6 +274,28 @@ button:active { transform: scale(.96); }
 .auth-hint b {
   background: rgba(255, 255, 255, .12); border-radius: 999px;
   padding: 1px 9px; font-weight: 600;
+}
+
+#invite-form { margin-top: 18px; }
+.auth-card .field { margin-bottom: 12px; }
+.auth-card .field input { background: var(--sunk); }
+
+/* Фирменная кнопка Яндекса: узнаётся быстрее, чем нейтральная. */
+.ya-btn {
+  width: 100%; margin-top: 10px; padding: 15px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  border: none; border-radius: var(--r-sm);
+  background: linear-gradient(180deg, rgba(252, 63, 29, .95), rgba(214, 47, 18, .9));
+  box-shadow: var(--tile-edge), 0 10px 24px -12px rgba(252, 63, 29, .9);
+  color: #fff; font-size: 15px; font-weight: 700; letter-spacing: -.01em;
+  transition: transform var(--spring-fast);
+}
+.ya-btn:active { transform: scale(.98); }
+.ya-logo {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: #fff; color: #fc3f1d;
+  display: grid; place-items: center;
+  font-size: 15px; font-weight: 700; line-height: 1;
 }
 
 /* --------------------------------------------------------------- каркас */
@@ -446,6 +468,33 @@ button:active { transform: scale(.96); }
 .pill-sum.pos { background: rgba(48, 209, 88, .24); color: #7cf29b; }
 .pill-sum.neg { background: rgba(255, 69, 58, .24); color: #ff9d96; }
 .pill-sum.flat { background: rgba(255, 255, 255, .08); color: var(--ink-2); }
+
+/* ------------------------------------------------------ аккаунт */
+
+/* Гостевой вход живёт токеном в браузере — предупреждаем, пока не привязан. */
+.link-card {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  border-radius: var(--r-md); padding: 14px; margin-top: 12px;
+}
+.link-text { flex: 1; min-width: 170px; display: grid; gap: 2px; }
+.link-text b { font-size: 13.5px; font-weight: 600; letter-spacing: -.02em; }
+.link-text span { font-size: 12px; color: var(--ink-3); }
+.link-actions { display: flex; gap: 8px; }
+
+/* Капсула действия рядом с текстом: материал берёт из общего списка мелочи. */
+.pill-btn {
+  flex: none; height: 34px; padding: 0 16px;
+  border: none; border-radius: 999px;
+  color: var(--ink); font-size: 13px; font-weight: 600; letter-spacing: -.01em;
+  transition: transform var(--spring-fast);
+}
+.pill-btn:active { transform: scale(.96); }
+
+.invite-out { display: flex; gap: 8px; margin-bottom: 10px; }
+.invite-out input {
+  flex: 1; min-width: 0; padding: 10px 14px; font-size: 13px;
+  border-radius: 999px; color: var(--ink-2);
+}
 
 /* --------------------------------------------------- кто кому должен */
 

@@ -21,6 +21,10 @@ CONTRIBUTION = "contribution"
 PURCHASE = "purchase"
 TRANSFER = "transfer"
 
+# Назначение одноразового токена.
+LOGIN = "login"
+LINK = "link"
+
 # Режим расчётов в группе.
 FUND = "fund"    # общая касса: скидываемся в фонд, покупки тратят его
 SPLIT = "split"  # делим расходы: платит кто-то один, остальные ему должны
@@ -53,6 +57,9 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     tg_user_id: Mapped[int | None] = mapped_column(BigInteger, unique=True, index=True)
+    # Личность из Яндекс ID — второй способ входа, независимый от Telegram.
+    yandex_id: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
+    email: Mapped[str | None] = mapped_column(String(255))
     username: Mapped[str | None] = mapped_column(String(64))
     first_name: Mapped[str] = mapped_column(String(128), default="")
     last_name: Mapped[str | None] = mapped_column(String(128))
@@ -69,6 +76,15 @@ class User(Base):
     @property
     def short_name(self) -> str:
         return (self.first_name or "").strip() or self.display_name
+
+    @property
+    def is_guest(self) -> bool:
+        """Вошёл по приглашению и пока ничем себя не подтвердил.
+
+        Такой аккаунт живёт только в этом браузере: очистит хранилище —
+        и войти будет нечем, поэтому в интерфейсе про это предупреждаем.
+        """
+        return self.tg_user_id is None and self.yandex_id is None
 
 
 class Membership(Base):
@@ -173,12 +189,38 @@ class DailyJob(Base):
 
 
 class WebLoginToken(Base):
-    """Одноразовый токен для входа в веб-версию из бота."""
+    """Одноразовый токен: вход в веб из бота или привязка аккаунта.
+
+    Оба сценария — «предъяви эту строку в течение N минут», поэтому таблица
+    одна, а различает их назначение.
+    """
 
     __tablename__ = "web_login_tokens"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    purpose: Mapped[str] = mapped_column(String(8), default=LOGIN, server_default=LOGIN)
     expires_at: Mapped[dt.datetime] = mapped_column(DateTime)
     used_at: Mapped[dt.datetime | None] = mapped_column(DateTime)
+
+
+class GroupInvite(Base):
+    """Ссылка-приглашение в бюджет.
+
+    Многоразовая: одну ссылку кидают в общий чат. Новая ссылка гасит прежние
+    той же группы — это и есть отзыв.
+    """
+
+    __tablename__ = "group_invites"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("groups.id", ondelete="CASCADE"))
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    expires_at: Mapped[dt.datetime] = mapped_column(DateTime)
+    uses: Mapped[int] = mapped_column(Integer, default=0)
+    max_uses: Mapped[int] = mapped_column(Integer, default=25)
+    revoked_at: Mapped[dt.datetime | None] = mapped_column(DateTime)
+
+    group: Mapped[Group] = relationship(lazy="selectin")

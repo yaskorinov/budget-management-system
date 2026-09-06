@@ -60,6 +60,15 @@ async def get_session() -> AsyncIterator[AsyncSession]:
 # отсутствующие таблицы, готовые он не трогает.
 LATE_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("groups", "mode", "VARCHAR(8) NOT NULL DEFAULT 'fund'"),
+    ("users", "yandex_id", "VARCHAR(64)"),
+    ("users", "email", "VARCHAR(255)"),
+    ("web_login_tokens", "purpose", "VARCHAR(8) NOT NULL DEFAULT 'login'"),
+)
+
+
+# ALTER TABLE колонку добавит, а индекс к ней — нет.
+LATE_INDEXES: tuple[str, ...] = (
+    "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_yandex_id ON users (yandex_id)",
 )
 
 
@@ -70,6 +79,8 @@ async def _add_late_columns(conn) -> None:
             await conn.exec_driver_sql(
                 f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"
             )
+    for statement in LATE_INDEXES:
+        await conn.exec_driver_sql(statement)
 
 
 async def init_db() -> None:

@@ -121,6 +121,43 @@ with TestClient(app) as client:
                        json={"kind": "transfer", "amount": 100}).status_code == 400, \
         "перевод без получателя недопустим"
 
+
+    # ------------------------------------- приглашение и вход без Telegram --
+    inv = client.post(f"/api/groups/{gid}/invite", headers=h).json()
+    token = inv["url"].split("invite=")[1]
+    info = client.get(f"/api/auth/invite/{token}").json()
+    print("приглашение:", info["group_title"], "от", info["inviter"])
+    assert info["group_title"] == "Тестовая квартира" and info["inviter"] == "Аня"
+
+    guest = client.post("/api/auth/invite",
+                        json={"token": token, "name": "Даша"}).json()
+    assert guest["user"]["is_guest"] and not guest["user"]["has_telegram"]
+    assert guest["user"]["name"] == "Даша"
+    assert [g["id"] for g in guest["groups"]] == [gid]
+
+    hg = {"Authorization": f"Bearer {guest['token']}"}
+    assert client.get(f"/api/groups/{gid}/summary", headers=hg).status_code == 200, \
+        "гость видит бюджет, в который его позвали"
+    assert client.get(f"/api/groups/{sid}/summary", headers=hg).status_code == 404, \
+        "и только его"
+
+    # Ссылка многоразовая: по ней войдёт и второй человек.
+    guest2 = client.post("/api/auth/invite",
+                         json={"token": token, "name": "Петя"}).json()
+    assert guest2["user"]["id"] != guest["user"]["id"]
+
+    # Новая ссылка гасит прежнюю.
+    fresh = client.post(f"/api/groups/{gid}/invite", headers=h).json()
+    assert client.get(f"/api/auth/invite/{token}").status_code == 404
+    assert client.get(f"/api/auth/invite/{fresh['url'].split('invite=')[1]}").status_code == 200
+
+    # Гость просит код привязки Telegram.
+    link = client.post("/api/link/telegram", headers=hg).json()
+    assert link["code"], link
+
+    # Вход через Яндекс в тестах не настроен — и наружу это видно честно.
+    assert client.get("/api/auth/yandex/url").status_code == 503
+    assert client.post("/api/link/yandex", headers=hg).status_code == 503
     assert client.get("/").status_code == 200
     assert "Общий бюджет" in client.get("/").text
     assert client.get("/app.js").status_code == 200

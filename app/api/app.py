@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from aiogram.types import Update
 
-from app.api.routes import charts_router, router
+from app.api.routes import charts_router, oauth_router, router
 from app.bot.bot import create_bot, create_dispatcher, setup_bot_commands
 from app.bot.scheduler import daily_loop
 from app.config import BASE_DIR, proxy_warning, settings
@@ -104,6 +104,7 @@ def create_app() -> FastAPI:
 
     app.include_router(router, prefix="/api")
     app.include_router(charts_router)
+    app.include_router(oauth_router)
 
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> dict[str, str]:

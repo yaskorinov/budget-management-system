@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     # Выходной прокси, например socks5://user:pass@host:1080.
     # proxy_url — на весь исходящий трафик; llm_proxy_url перекрывает его
     # для запросов к модели: часто через прокси нужен только он
+    # ---------- Яндекс ID ----------
+    yandex_client_id: str = ""
+    yandex_client_secret: str = ""
+
     proxy_url: str = ""
     llm_proxy_url: str = ""
 
@@ -72,6 +76,17 @@ class Settings(BaseSettings):
     @property
     def llm_proxy(self) -> str | None:
         return self.llm_proxy_url or self.proxy_url or None
+
+    @property
+    def yandex_enabled(self) -> bool:
+        """Вход через Яндекс включаем только когда есть приложение и адрес."""
+        return bool(
+            self.yandex_client_id and self.yandex_client_secret and self.public_base_url
+        )
+
+    @property
+    def yandex_redirect_uri(self) -> str:
+        return f"{self.public_base_url.rstrip('/')}/auth/yandex/callback"
 
     @property
     def llm_enabled(self) -> bool:

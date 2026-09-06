@@ -21,6 +21,7 @@ const state = {
   period: 'month',
   editing: null,
   pick: null,
+  yandexReady: false,
 };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -151,6 +152,9 @@ function showAuth(message) {
 async function authenticate() {
   const params = new URLSearchParams(location.search);
   const magic = params.get('login');
+  const invite = params.get('invite');
+  const failure = params.get('auth_error');
+  if (failure) history.replaceState({}, '', location.pathname);
 
   try {
     let payload = null;
@@ -160,6 +164,9 @@ async function authenticate() {
         body: JSON.stringify({ token: magic }),
       });
       history.replaceState({}, '', location.pathname);
+    } else if (invite) {
+      payload = await joinByInvite(invite);
+      if (!payload) return;
     } else if (tg && tg.initData) {
       payload = await api('/auth/telegram', {
         method: 'POST',
@@ -170,29 +177,91 @@ async function authenticate() {
     }
 
     if (!payload) {
-      showAuth('Откройте приложение через бота: отправьте /web и перейдите по ссылке.');
+      showAuth(failure || 'Откройте приложение через бота: отправьте /web и перейдите по ссылке.');
+      offerYandex();
       return;
     }
 
-    state.token = payload.token;
-    localStorage.setItem('budget_token', payload.token);
-    state.user = payload.user;
-    state.groups = payload.groups;
-    state.groupId = payload.active_group_id || (payload.groups[0] && payload.groups[0].id);
-
-    if (!state.groupId) {
-      showAuth('У вас пока нет общего бюджета. Создайте его в боте: /newgroup Название');
-      return;
-    }
-
-    $('auth').style.display = 'none';
-    $('app').hidden = false;
-    await bootstrap();
+    await enter(payload);
   } catch (error) {
     if (error.message !== 'unauthorized') {
       showAuth(`Не удалось войти: ${error.message}`);
+      offerYandex();
     }
   }
+}
+
+// Общий хвост всех способов входа: запомнить сессию и показать приложение.
+async function enter(payload) {
+  state.token = payload.token;
+  localStorage.setItem('budget_token', payload.token);
+  state.user = payload.user;
+  state.groups = payload.groups;
+  state.groupId = payload.active_group_id || (payload.groups[0] && payload.groups[0].id);
+
+  if (!state.groupId) {
+    showAuth('У вас пока нет общего бюджета. Создайте его в боте: /newgroup Название');
+    return;
+  }
+
+  $('auth').style.display = 'none';
+  $('app').hidden = false;
+  await bootstrap();
+}
+
+// Приглашение: вошедший просто вступает, новому сначала показываем, куда зовут.
+async function joinByInvite(token) {
+  const info = await api(`/auth/invite/${encodeURIComponent(token)}`).catch(() => null);
+  if (!info) {
+    showAuth('Приглашение недействительно или уже использовано');
+    offerYandex();
+    return null;
+  }
+
+  if (state.token) {
+    const payload = await api('/auth/invite', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    });
+    history.replaceState({}, '', location.pathname);
+    return payload;
+  }
+
+  showAuth(`Вас зовут в бюджет «${info.group_title}»`);
+  $('auth-hint').textContent = info.inviter
+    ? `Кто пригласил: ${info.inviter}. Войдите — и увидите общие расходы.`
+    : 'Войдите — и увидите общие расходы.';
+  $('invite-form').hidden = false;
+  offerYandex(token);
+
+  $('invite-go').onclick = async () => {
+    const name = $('invite-name').value.trim();
+    if (!name) return toast('Напишите, как вас зовут');
+    try {
+      const payload = await api('/auth/invite', {
+        method: 'POST',
+        body: JSON.stringify({ token, name }),
+      });
+      history.replaceState({}, '', location.pathname);
+      await enter(payload);
+    } catch (error) {
+      toast(error.message);
+    }
+  };
+  return null;
+}
+
+// Кнопка появляется, только если вход через Яндекс настроен на сервере.
+async function offerYandex(invite) {
+  try {
+    const path = invite
+      ? `/auth/yandex/url?invite=${encodeURIComponent(invite)}`
+      : '/auth/yandex/url';
+    const { url } = await api(path);
+    const button = $('yandex-login');
+    button.hidden = false;
+    button.onclick = () => { location.href = url; };
+  } catch (_) { /* не настроен — кнопки просто нет */ }
 }
 
 // --------------------------------------------------------------------------- //
@@ -213,6 +282,8 @@ async function bootstrap() {
 
   state.categories = await api('/categories');
   renderCategories();
+  renderAccount();
+  probeYandex();
   await refresh();
 }
 
@@ -925,6 +996,89 @@ $('group-select').onchange = async (event) => {
   updateGroupName();
   await api(`/me/active-group/${state.groupId}`, { method: 'POST' });
   await refresh();
+};
+
+// --------------------------------------------------------------------------- //
+//  Аккаунт: приглашения и привязка
+// --------------------------------------------------------------------------- //
+
+function renderAccount() {
+  const user = state.user || {};
+  $('link-block').hidden = !user.is_guest;
+  $('link-ya').hidden = !state.yandexReady || user.has_yandex;
+  $('link-tg').hidden = user.has_telegram;
+}
+
+// Кнопку «Яндекс» показываем только когда вход через него настроен.
+async function probeYandex() {
+  try {
+    await api('/auth/yandex/url');
+    state.yandexReady = true;
+  } catch (_) {
+    state.yandexReady = false;
+  }
+  renderAccount();
+}
+
+async function reloadMe() {
+  try {
+    const payload = await api('/me');
+    state.user = payload.user;
+    state.groups = payload.groups;
+    renderAccount();
+  } catch (_) { /* сессия протухла — разберётся api() */ }
+}
+
+$('link-tg').onclick = async () => {
+  try {
+    const data = await api('/link/telegram', { method: 'POST' });
+    if (!data.url) return toast(`Отправьте боту: /start link_${data.code}`);
+    toast('Подтвердите привязку в Telegram');
+    // Ждём возвращения из Telegram, чтобы обновить отметки на месте.
+    window.addEventListener('focus', reloadMe, { once: true });
+    if (tg && tg.openTelegramLink) tg.openTelegramLink(data.url);
+    else window.open(data.url, '_blank');
+  } catch (error) {
+    toast(error.message);
+  }
+};
+
+$('link-ya').onclick = async () => {
+  try {
+    const { url } = await api('/link/yandex', { method: 'POST' });
+    location.href = url;
+  } catch (error) {
+    toast(error.message);
+  }
+};
+
+$('invite-btn').onclick = async () => {
+  try {
+    const data = await api(`/groups/${state.groupId}/invite`, { method: 'POST' });
+    $('invite-url').value = data.url;
+    $('invite-out').hidden = false;
+    haptic();
+  } catch (error) {
+    toast(error.message);
+  }
+};
+
+$('invite-copy').onclick = async () => {
+  const url = $('invite-url').value;
+  if (!url) return;
+
+  // Внутри Telegram делиться удобнее пересылкой, чем буфером обмена.
+  if (tg && tg.openTelegramLink) {
+    tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(url)}`);
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    toast('Ссылка скопирована — действует 7 дней');
+  } catch (_) {
+    $('invite-url').select();
+    toast('Скопируйте ссылку из поля');
+  }
 };
 
 document.addEventListener('keydown', (event) => {

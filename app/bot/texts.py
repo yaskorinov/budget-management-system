@@ -1,6 +1,8 @@
 """Сборка сообщений бота в Rich Markdown (см. app/bot/rich.py)."""
 from __future__ import annotations
 
+import datetime as dt
+
 from app.bot.rich import (
     Rich,
     blocks,
@@ -13,6 +15,7 @@ from app.bot.rich import (
     italic,
     join,
     lines,
+    link,
     marked,
     pre,
     quote,
@@ -346,6 +349,20 @@ MODE_ABOUT = {
 }
 
 
+def invite_card(group: Group, url: str, expires: dt.datetime) -> Rich:
+    """Ссылка-приглашение: по ней входят в браузере, без Telegram."""
+    return blocks(
+        heading(2, join("🔗 Приглашение в «", group.title, "»")),
+        join("Перешлите ссылку — по ней человек войдёт в бюджет из браузера, "
+             "даже если у него нет Telegram."),
+        quote(link("Открыть приглашение", url)),
+        bullets(
+            join("Действует до ", periods.format_date(expires)),
+            "Новая ссылка отменяет прежнюю",
+        ),
+    )
+
+
 def mode_prompt(group: Group) -> Rich:
     """Вопрос сразу после создания бюджета: как считать деньги."""
     return blocks(
@@ -417,6 +434,7 @@ def help_text(bot_username: str | None = None, *, split: bool = False) -> Rich:
                 [cmd("/ops"), "последние операции"],
                 [cmd("/voice"), "записать операцию голосом"],
                 [cmd("/join"), "присоединиться к бюджету чата"],
+                [cmd("/invite"), "ссылка-приглашение в браузер"],
                 [cmd("/mode"), "режим расчётов"],
             ],
         ),
@@ -426,12 +444,14 @@ def help_text(bot_username: str | None = None, *, split: bool = False) -> Rich:
 
     if settings.web_enabled:
         parts.append(heading(2, "Веб-версия"))
-        parts.append(
-            bullets(
-                join(cmd("/web"), " в личке — одноразовая ссылка на мини-аппу"),
-                "Она же открывается в обычном браузере",
-            )
-        )
+        web_lines = [
+            join(cmd("/web"), " в личке — одноразовая ссылка на мини-аппу"),
+            join(cmd("/invite"), " — ссылка для тех, у кого нет Telegram"),
+            "Она же открывается в обычном браузере",
+        ]
+        if settings.yandex_enabled:
+            web_lines.append("В браузере можно войти через Яндекс ID")
+        parts.append(bullets(*web_lines))
 
     parts.append(rule())
     parts.append(

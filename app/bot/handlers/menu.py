@@ -27,7 +27,7 @@ from app.bot.common import (
 )
 from app.config import settings
 from app.core import service
-from app.db.models import Group, User
+from app.db.models import LINK, Group, User
 
 router = Router(name="menu")
 
@@ -118,8 +118,12 @@ async def start_private(
     state: FSMContext,
 ) -> None:
     await state.clear()
-    if (command.args or "").strip() == "web":
+    args = (command.args or "").strip()
+    if args == "web":
         await send_login_link(message, session, user)
+        return
+    if args.startswith("link_"):
+        await link_web_account(message, session, user, args.removeprefix("link_"))
         return
 
     text, markup = await render_home(session, user)
@@ -166,6 +170,61 @@ async def new_group(
     await answer_rich(
         message, texts.mode_prompt(group), reply_markup=keyboards.mode_kb(group.id)
     )
+
+
+@router.message(Command("invite"))
+async def invite_command(
+    message: Message, session: AsyncSession, user: User
+) -> None:
+    """Ссылка-приглашение: по ней входят в браузере, Telegram не нужен."""
+    group = await resolve_group(session, message, user)
+    if group is None:
+        await answer_rich(message, NO_GROUP_HINT)
+        return
+    if not settings.web_enabled:
+        await answer_rich(
+            message,
+            texts.join("Веб-версия не настроена: в .env нужен PUBLIC_BASE_URL с https."),
+        )
+        return
+
+    invite = await service.create_invite(
+        session, group_id=group.id, created_by=user.id
+    )
+    url = f"{settings.public_base_url.rstrip('/')}/?invite={invite.token}"
+    await answer_rich(message, texts.invite_card(group, url, invite.expires_at))
+
+
+async def link_web_account(
+    message: Message, session: AsyncSession, tg_user: User, code: str
+) -> None:
+    """Привязка веб-аккаунта к этому Telegram по одноразовому коду."""
+    web_user = await service.consume_login_token(session, code, purpose=LINK)
+    if web_user is None:
+        await answer_rich(
+            message,
+            texts.join("⚠️ Ссылка привязки недействительна или уже использована."),
+        )
+        return
+
+    try:
+        user = await service.link_telegram(session, web_user=web_user, tg_user=tg_user)
+    except service.ServiceError as exc:
+        await answer_rich(message, texts.join("⚠️ ", str(exc)))
+        return
+
+    await answer_rich(
+        message,
+        texts.blocks(
+            texts.heading(2, "✅ Telegram привязан"),
+            texts.join(
+                "Аккаунт «", user.short_name,
+                "» теперь открывается и здесь, и в браузере.",
+            ),
+        ),
+    )
+    text, markup = await render_home(session, user)
+    await answer_rich(message, text, reply_markup=markup)
 
 
 @router.message(Command("groups"), F.chat.type == "private")

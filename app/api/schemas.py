@@ -10,6 +10,36 @@ class TelegramAuthIn(BaseModel):
     init_data: str
 
 
+class InviteAcceptIn(BaseModel):
+    token: str
+    name: str | None = None
+
+
+class InviteInfoOut(BaseModel):
+    group_title: str
+    mode: str
+    inviter: str
+    expires_at: dt.datetime
+
+
+class InviteOut(BaseModel):
+    url: str
+    expires_at: dt.datetime
+    uses: int
+    max_uses: int
+
+
+class LinkOut(BaseModel):
+    """Одноразовый код привязки и готовая ссылка на бота."""
+
+    code: str
+    url: str
+
+
+class RedirectOut(BaseModel):
+    url: str
+
+
 class MagicAuthIn(BaseModel):
     token: str
 
@@ -18,6 +48,9 @@ class UserOut(BaseModel):
     id: int
     name: str
     username: str | None = None
+    is_guest: bool = False       # вошёл по приглашению и ничем себя не подтвердил
+    has_telegram: bool = False
+    has_yandex: bool = False
 
 
 class GroupOut(BaseModel):

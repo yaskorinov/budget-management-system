@@ -51,8 +51,20 @@
   </div>
   <div class="auth-card">
     <p id="auth-text" class="auth-status">Проверяем вход…</p>
-    <p class="auth-hint">Из браузера: отправьте боту команду <b>/web</b> и откройте
-      присланную ссылку.</p>
+    <p class="auth-hint" id="auth-hint">Из браузера: отправьте боту команду <b>/web</b>
+      и откройте присланную ссылку.</p>
+
+    <div id="invite-form" hidden>
+      <label class="field">
+        <span class="eyebrow">Как вас зовут</span>
+        <input id="invite-name" type="text" placeholder="Имя" maxlength="40">
+      </label>
+      <button type="button" id="invite-go" class="primary-btn">Войти в бюджет</button>
+    </div>
+
+    <button type="button" id="yandex-login" class="ya-btn" hidden>
+      <span class="ya-logo">Я</span>Войти с Яндекс ID
+    </button>
   </div>
 </div>
 
@@ -90,12 +102,30 @@
             </div>
           </div>
 
+          <div id="link-block" class="link-card" hidden>
+            <div class="link-text">
+              <b>Аккаунт живёт только в этом браузере</b>
+              <span>Привяжите, чтобы не потерять доступ к бюджету</span>
+            </div>
+            <div class="link-actions">
+              <button type="button" class="pill-btn" id="link-tg">Telegram</button>
+              <button type="button" class="pill-btn" id="link-ya" hidden>Яндекс</button>
+            </div>
+          </div>
+
           <div id="debts-block" hidden>
             <h2 class="section-title">Кто кому должен</h2>
             <div id="debts" class="debts"></div>
           </div>
 
-          <h2 class="section-title">Баланс участников</h2>
+          <div class="section-head">
+            <h2 class="section-title">Баланс участников</h2>
+            <button class="link-btn" id="invite-btn" type="button">Пригласить</button>
+          </div>
+          <div id="invite-out" class="invite-out" hidden>
+            <input id="invite-url" readonly>
+            <button type="button" class="pill-btn" id="invite-copy">Копировать</button>
+          </div>
           <div id="balances" class="balances"></div>
         </div>
 

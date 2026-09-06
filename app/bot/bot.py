@@ -41,6 +41,7 @@ PRIVATE_COMMANDS = [
     BotCommand(command="ops", description="Мои операции"),
     BotCommand(command="groups", description="Выбрать активный бюджет"),
     BotCommand(command="newgroup", description="Создать бюджет"),
+    BotCommand(command="invite", description="Ссылка-приглашение в бюджет"),
     BotCommand(command="mode", description="Режим расчётов"),
     BotCommand(command="voice", description="Записать операцию голосом"),
     BotCommand(command="web", description="Ссылка на веб-версию"),
@@ -56,6 +57,7 @@ GROUP_COMMANDS = [
     BotCommand(command="ops", description="Последние операции"),
     BotCommand(command="voice", description="Записать операцию голосом"),
     BotCommand(command="members", description="Участники"),
+    BotCommand(command="invite", description="Ссылка-приглашение в бюджет"),
     BotCommand(command="mode", description="Режим расчётов"),
     BotCommand(command="help", description="Как пользоваться"),
 ]

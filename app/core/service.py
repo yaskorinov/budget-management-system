@@ -5,7 +5,7 @@ import datetime as dt
 import secrets
 from dataclasses import dataclass, field
 
-from sqlalchemy import Select, func, inspect as sa_inspect, select
+from sqlalchemy import Select, func, inspect as sa_inspect, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_committed_value
 
@@ -13,6 +13,8 @@ from app.core.money import split_amount
 from app.db.base import utcnow
 from app.db.models import (
     CONTRIBUTION,
+    LINK,
+    LOGIN,
     FUND,
     MODES,
     PURCHASE,
@@ -20,6 +22,7 @@ from app.db.models import (
     TRANSFER,
     DailyJob,
     Group,
+    GroupInvite,
     Membership,
     Operation,
     OperationShare,
@@ -807,13 +810,17 @@ async def groups_with_chats(session: AsyncSession) -> list[Group]:
 
 
 async def create_login_token(
-    session: AsyncSession, user_id: int, ttl_minutes: int = 15
+    session: AsyncSession,
+    user_id: int,
+    ttl_minutes: int = 15,
+    purpose: str = LOGIN,
 ) -> str:
     token = secrets.token_urlsafe(24)
     session.add(
         WebLoginToken(
             token=token,
             user_id=user_id,
+            purpose=purpose,
             expires_at=utcnow() + dt.timedelta(minutes=ttl_minutes),
         )
     )
@@ -821,10 +828,170 @@ async def create_login_token(
     return token
 
 
-async def consume_login_token(session: AsyncSession, token: str) -> User | None:
-    row = await session.scalar(select(WebLoginToken).where(WebLoginToken.token == token))
+async def consume_login_token(
+    session: AsyncSession, token: str, purpose: str = LOGIN
+) -> User | None:
+    row = await session.scalar(
+        select(WebLoginToken).where(
+            WebLoginToken.token == token, WebLoginToken.purpose == purpose
+        )
+    )
     if row is None or row.used_at is not None or row.expires_at < utcnow():
         return None
     row.used_at = utcnow()
     await session.flush()
     return await session.get(User, row.user_id)
+
+
+# --------------------------------------------------------------------------- #
+#  Приглашения в бюджет
+# --------------------------------------------------------------------------- #
+
+
+async def create_invite(
+    session: AsyncSession,
+    *,
+    group_id: int,
+    created_by: int,
+    ttl_days: int = 7,
+    max_uses: int = 25,
+) -> GroupInvite:
+    """Новая ссылка гасит прежние ссылки этой группы — это и есть отзыв."""
+    await session.execute(
+        update(GroupInvite)
+        .where(GroupInvite.group_id == group_id, GroupInvite.revoked_at.is_(None))
+        .values(revoked_at=utcnow())
+    )
+    invite = GroupInvite(
+        token=secrets.token_urlsafe(18),
+        group_id=group_id,
+        created_by=created_by,
+        expires_at=utcnow() + dt.timedelta(days=ttl_days),
+        max_uses=max_uses,
+    )
+    session.add(invite)
+    await session.flush()
+    return invite
+
+
+async def get_invite(session: AsyncSession, token: str) -> GroupInvite | None:
+    """Живое приглашение или None: протухшее, отозванное и исчерпанное — не в счёт."""
+    invite = await session.scalar(
+        select(GroupInvite).where(GroupInvite.token == token)
+    )
+    if invite is None or invite.revoked_at is not None:
+        return None
+    if invite.expires_at < utcnow() or invite.uses >= invite.max_uses:
+        return None
+    return invite
+
+
+async def accept_invite(
+    session: AsyncSession, *, invite: GroupInvite, user: User
+) -> Group:
+    already = await is_member(session, group_id=invite.group_id, user_id=user.id)
+    await ensure_member(session, group_id=invite.group_id, user_id=user.id)
+    if not already:
+        invite.uses += 1
+    user.active_group_id = invite.group_id
+    await session.flush()
+    return await session.get(Group, invite.group_id)
+
+
+async def create_guest(session: AsyncSession, *, name: str) -> User:
+    """Аккаунт без Telegram и Яндекса: живёт токеном в браузере."""
+    user = User(first_name=(name or "").strip()[:128] or "Гость")
+    session.add(user)
+    await session.flush()
+    return user
+
+
+# --------------------------------------------------------------------------- #
+#  Яндекс ID и привязка Telegram
+# --------------------------------------------------------------------------- #
+
+
+async def user_by_yandex(session: AsyncSession, yandex_id: str) -> User | None:
+    return await session.scalar(select(User).where(User.yandex_id == yandex_id))
+
+
+async def attach_yandex(
+    session: AsyncSession,
+    *,
+    user: User,
+    yandex_id: str,
+    email: str | None = None,
+    name: str | None = None,
+) -> User:
+    taken = await user_by_yandex(session, yandex_id)
+    if taken is not None and taken.id != user.id:
+        raise ServiceError("Этот Яндекс ID уже привязан к другому аккаунту")
+
+    user.yandex_id = yandex_id
+    if email:
+        user.email = email[:255]
+    if name and not (user.first_name or "").strip():
+        user.first_name = name[:128]
+    await session.flush()
+    return user
+
+
+async def has_history(session: AsyncSession, user_id: int) -> bool:
+    """Есть ли за аккаунтом что-то, что нельзя потерять при привязке."""
+    operations = await session.scalar(
+        select(func.count())
+        .select_from(Operation)
+        .where(Operation.author_id == user_id, Operation.deleted_at.is_(None))
+    )
+    if operations:
+        return True
+    shares = await session.scalar(
+        select(func.count()).select_from(OperationShare).where(
+            OperationShare.user_id == user_id
+        )
+    )
+    if shares:
+        return True
+    memberships = await session.scalar(
+        select(func.count()).select_from(Membership).where(
+            Membership.user_id == user_id, Membership.is_active.is_(True)
+        )
+    )
+    return bool(memberships)
+
+
+async def link_telegram(
+    session: AsyncSession, *, web_user: User, tg_user: User
+) -> User:
+    """Привязывает Telegram к веб-аккаунту.
+
+    Слияние двух живых аккаунтов пока не поддерживаем: перенос операций, долей
+    и участий — отдельная задача, а тихо потерять их нельзя. Поэтому привязка
+    разрешена, только если со стороны Telegram истории ещё нет.
+    """
+    if web_user.id == tg_user.id:
+        raise ServiceError("Этот аккаунт уже привязан к Telegram")
+    if web_user.tg_user_id is not None:
+        raise ServiceError("К аккаунту уже привязан другой Telegram")
+    if await has_history(session, tg_user.id):
+        raise ServiceError(
+            "В этом Telegram уже есть свои бюджеты и операции. "
+            "Объединение аккаунтов пока не поддерживается"
+        )
+
+    # Сначала освобождаем идентификатор: он уникален, и обе записи одновременно
+    # держать его не могут — порядок в одном flush не гарантирован.
+    tg_id, username = tg_user.tg_user_id, tg_user.username
+    first_name, last_name = tg_user.first_name, tg_user.last_name
+    tg_user.tg_user_id = None
+    await session.flush()
+    await session.delete(tg_user)
+    await session.flush()
+
+    web_user.tg_user_id = tg_id
+    web_user.username = username or web_user.username
+    if not (web_user.first_name or "").strip():
+        web_user.first_name = first_name
+        web_user.last_name = last_name
+    await session.flush()
+    return web_user
