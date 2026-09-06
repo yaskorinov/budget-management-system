@@ -150,6 +150,13 @@ class StatsOut(BaseModel):
     chart_url: str | None = None
 
 
+class InsightOut(BaseModel):
+    """Совет по расходам — тот же, что бот шлёт раз в день."""
+
+    text: str | None = None
+    enabled: bool = False
+
+
 class CategorizeIn(BaseModel):
     text: str
 

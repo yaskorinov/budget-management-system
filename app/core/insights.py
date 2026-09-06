@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import datetime as dt
 import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +19,11 @@ from app.core.money import format_money
 from app.db.models import Group
 
 log = logging.getLogger(__name__)
+
+# Совет за день считаем один раз на бюджет: модель отвечает не мгновенно и не
+# бесплатно, а вечерняя рассылка и веб должны показывать один и тот же текст.
+# Кэш в памяти процесса: перезапуск просто заставит пересчитать.
+_TIP_CACHE: dict[tuple[int, dt.date], str | None] = {}
 
 TIP_SYSTEM = (
     "Ты помогаешь людям, которые ведут общий бюджет: соседи по квартире, семья, "
@@ -53,8 +59,27 @@ DEBT_FALLBACK = "Общий фонд просит пополнения — ка�
 DEBT_SPLIT_FALLBACK = "Долги сами себя не вернут — как будет удобно."
 
 
-async def spending_tip(session: AsyncSession, group: Group) -> str | None:
-    """Совет по расходам за месяц. None — если тратить пока не на чем."""
+async def spending_tip(
+    session: AsyncSession, group: Group, *, refresh: bool = False
+) -> str | None:
+    """Совет по расходам за месяц. None — если тратить пока не на чем.
+
+    Один и тот же текст за день: его показывает и вечерняя рассылка, и веб.
+    """
+    today = periods.to_local(dt.datetime.utcnow()).date()
+    key = (group.id, today)
+    if not refresh and key in _TIP_CACHE:
+        return _TIP_CACHE[key]
+
+    tip = await _make_tip(session, group)
+    # Пустой ответ модели не кэшируем: в следующий заход может получиться.
+    if tip is not None or not settings.llm_enabled:
+        _TIP_CACHE.clear()
+        _TIP_CACHE[key] = tip
+    return tip
+
+
+async def _make_tip(session: AsyncSession, group: Group) -> str | None:
     since, until, period_title = periods.bounds("month")
     rows = await service.stats_by_category(
         session, group_id=group.id, since=since, until=until

@@ -11,7 +11,7 @@ from app.api import schemas, yandex
 from app.api.auth import current_user, issue_session, read_session, verify_init_data
 from app.config import settings
 from app.core import categories as cat
-from app.core import periods, reports, service
+from app.core import insights, periods, reports, service
 from app.core.classifier import parse_purchase
 from app.db.base import get_session
 from app.db.models import LINK, Group, Operation, User
@@ -187,6 +187,21 @@ async def group_summary(
             )
             for debt in data.debts
         ],
+    )
+
+
+@router.get("/groups/{group_id}/insight", response_model=schemas.InsightOut)
+async def group_insight(
+    group_id: int,
+    refresh: bool = False,
+    user: User = Depends(current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Совет по расходам. За день считается один раз — см. insights."""
+    group = await _group_for(session, user, group_id)
+    return schemas.InsightOut(
+        text=await insights.spending_tip(session, group, refresh=refresh),
+        enabled=settings.llm_enabled,
     )
 
 

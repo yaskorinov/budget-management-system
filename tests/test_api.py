@@ -86,6 +86,10 @@ with TestClient(app) as client:
     print("разбор:", cz)
     assert cz["amount"] == 45000 and cz["category"] == "household"
 
+    # Совет по расходам: модель в тестах выключена — эндпоинт честно молчит.
+    tip = client.get(f"/api/groups/{gid}/insight", headers=h).json()
+    assert tip == {"text": None, "enabled": False}, tip
+
     ops = client.get(f"/api/groups/{gid}/operations", headers=h).json()
     print("операций:", len(ops), "| can_edit:", [o["can_edit"] for o in ops])
 

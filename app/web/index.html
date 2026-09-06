@@ -102,6 +102,19 @@
             </div>
           </div>
 
+          <!-- Совет ИИ — тот же, что бот присылает вечером -->
+          <div id="insight" class="insight" hidden>
+            <div class="insight-head">
+              <span class="insight-icon"><svg class="ic ic-18"><use href="#i-spark"/></svg></span>
+              <span class="eyebrow">Совет по расходам</span>
+              <button type="button" class="mini-btn" id="insight-refresh"
+                      aria-label="Пересобрать совет">
+                <svg class="ic"><use href="#i-refresh"/></svg>
+              </button>
+            </div>
+            <p class="insight-text" id="insight-text"></p>
+          </div>
+
           <div id="link-block" class="link-card" hidden>
             <div class="link-text">
               <b>Аккаунт живёт только в этом браузере</b>

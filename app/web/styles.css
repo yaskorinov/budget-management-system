@@ -159,7 +159,7 @@ button { cursor: pointer; }
 
 /* Крупные поверхности: настоящая линза с размытием фона. */
 .pane, .card, .fund, .op, .balance, .debt, .empty, .chart, .legend,
-.auth-card, .auth-hero, .link-card {
+.auth-card, .auth-hero, .link-card, .insight {
   position: relative;
   border: none;
   border-radius: var(--r-lg);
@@ -181,8 +181,8 @@ button { cursor: pointer; }
    иначе текст ляжет прямо на цветное облако. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .pane, .card, .fund, .op, .balance, .debt, .empty, .chart, .legend,
-  .auth-card, .auth-hero, .link-card, .tabbar, .dock-btn, .sheet-card, .toast,
-  .appbar .group-pill, .appbar .icon-btn {
+  .auth-card, .auth-hero, .link-card, .insight, .tabbar, .dock-btn, .sheet-card,
+  .toast, .appbar .group-pill, .appbar .icon-btn {
     background: var(--glass-solid);
   }
 }
@@ -468,6 +468,35 @@ button:active { transform: scale(.96); }
 .pill-sum.pos { background: rgba(48, 209, 88, .24); color: #7cf29b; }
 .pill-sum.neg { background: rgba(255, 69, 58, .24); color: #ff9d96; }
 .pill-sum.flat { background: rgba(255, 255, 255, .08); color: var(--ink-2); }
+
+/* ------------------------------------------------------- совет ИИ */
+
+/* Тот же текст, что бот присылает вечером. Стоит сразу под остатком: это
+   вывод из тех же цифр, а не отдельный раздел. */
+.insight {
+  border-radius: var(--r-md); padding: 14px 16px 16px; margin-top: 12px;
+}
+.insight-head { display: flex; align-items: center; gap: 8px; }
+.insight-head .eyebrow { flex: 1; }
+.insight-icon {
+  width: 26px; height: 26px; border-radius: 50%; flex: none;
+  display: grid; place-items: center;
+  background: rgba(10, 132, 255, .22);
+  box-shadow: var(--tile-edge);
+  color: #8fc4ff;
+}
+.insight-head .mini-btn { width: 28px; height: 28px; }
+.insight-head .mini-btn .ic { width: 15px; height: 15px; }
+.insight-text {
+  margin: 10px 0 0; font-size: 14px; line-height: 1.45;
+  color: var(--ink-2); letter-spacing: -.01em;
+  white-space: pre-line;
+}
+
+/* Пока модель думает, текст дышит — иначе непонятно, идёт ли что-то. */
+.insight.loading .insight-text { color: var(--ink-3); animation: breathe 1.4s ease-in-out infinite; }
+.insight.loading .insight-head .mini-btn { opacity: .5; }
+@keyframes breathe { 50% { opacity: .45; } }
 
 /* ------------------------------------------------------ аккаунт */
 

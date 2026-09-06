@@ -330,6 +330,8 @@ async function refresh() {
   renderFund(summary);
   renderBalances(summary);
   renderDebts(summary);
+  // Совет считает модель — не держим из-за него весь экран.
+  loadInsight().catch(() => {});
   renderParticipants();
   await Promise.all([loadOperations(), loadStats()]);
 }
@@ -393,6 +395,37 @@ function renderBalances(summary) {
     box.appendChild(card);
   });
 }
+
+// Тот же совет, что бот присылает вечером: за день он считается один раз,
+// поэтому повторные заходы отвечают сразу.
+async function loadInsight({ refresh = false } = {}) {
+  const box = $('insight');
+  box.hidden = false;
+  box.classList.add('loading');
+  $('insight-text').textContent = refresh
+    ? 'Пересобираю совет…'
+    : 'Смотрю, на что уходят деньги…';
+
+  try {
+    const data = await api(
+      `/groups/${state.groupId}/insight${refresh ? '?refresh=true' : ''}`
+    );
+    if (!data.text) {
+      box.hidden = true;   // модель выключена или тратить пока не на что
+      return;
+    }
+    $('insight-text').textContent = data.text;
+  } catch (_) {
+    box.hidden = true;
+  } finally {
+    box.classList.remove('loading');
+  }
+}
+
+$('insight-refresh').onclick = () => {
+  haptic();
+  loadInsight({ refresh: true }).catch(() => {});
+};
 
 function renderDebts(summary) {
   const box = $('debts');
