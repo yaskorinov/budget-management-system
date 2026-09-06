@@ -62,31 +62,47 @@
 
   /* -------- материал ---------------------------------------------------- */
 
-  /* Подложка: свет падает сверху слева, поэтому градиент идёт по диагонали. */
-  --fill: linear-gradient(146deg, rgba(255, 255, 255, .17) 0%, rgba(255, 255, 255, .07) 100%);
-  --fill-deep: linear-gradient(146deg, rgba(255, 255, 255, .22) 0%, rgba(255, 255, 255, .1) 100%);
-  --edge: rgba(255, 255, 255, .14);
+  /* Стекло собрано тем же приёмом, что и нижняя панель: подложка почти
+     прозрачная, а объём дают направленные внутренние блики. Свет ловят две
+     грани — верхняя-левая и нижняя-правая; сверху внутрь падает тень толщины,
+     снизу поднимается мягкий рефлекс. Заливкой этот объём не подменить:
+     панель, залитая белым, читается матовым пластиком, а не линзой. */
+  /* Подложка светлее холста ровно настолько, чтобы пластина читалась на
+     пустом фоне: в нижней панели эту роль играл контент под стеклом, а
+     карточкам подложить нечего. */
+  --glass: rgba(255, 255, 255, .05);
+  --glass-dense: rgba(0, 0, 0, .3);    /* шторка и тост: за ними лежит текст */
+  --glass-solid: #1b1b1f;              /* запас для вебвью без backdrop-filter */
+  --blur: blur(9px) saturate(140%);
+  --blur-deep: blur(20px) saturate(150%);
 
-  /* Фаска: верхний скол, нижний рефлекс и подсветка боковых граней. */
-  --facet:
-    inset 0 1.4px 1px -.7px rgba(255, 255, 255, .6),
-    inset 1px 0 1px -.9px rgba(255, 255, 255, .22),
-    inset -1px 0 1px -.9px rgba(255, 255, 255, .18),
-    inset 0 -1.2px 1px -.7px rgba(0, 0, 0, .45);
+  --glass-edge:
+    inset 0 0 0 1px rgba(255, 255, 255, .06),
+    inset 1.8px 3px 0 -2px rgba(255, 255, 255, .27),
+    inset -2px -2px 0 -2px rgba(255, 255, 255, .22),
+    inset -3px -8px 1px -6px rgba(255, 255, 255, .16),
+    inset 0 3px 4px -2px rgba(0, 0, 0, .4),
+    0 1px 5px rgba(0, 0, 0, .2),
+    0 6px 16px rgba(0, 0, 0, .16);
 
-  /* Тонкая фаска — для мелочи, где толстый скол смотрится как обводка. */
-  --facet-soft:
-    inset 0 1px 1px -.6px rgba(255, 255, 255, .45),
-    inset 0 -1px 1px -.6px rgba(0, 0, 0, .35);
+  /* Тот же приём, но плотнее и мельче: подвижная линза и мелкие органы
+     управления. */
+  --capsule: rgba(0, 0, 0, .3);
+  --capsule-edge:
+    inset 0 0 0 1px rgba(255, 255, 255, .03),
+    inset 2px 1px 0 -1px rgba(255, 255, 255, .27),
+    inset -1.5px -1px 0 -1px rgba(255, 255, 255, .24),
+    inset -2px -6px 1px -5px rgba(255, 255, 255, .18),
+    inset -1px 2px 3px -1px rgba(0, 0, 0, .4),
+    inset 0 -4px 1px -2px rgba(0, 0, 0, .2),
+    0 3px 6px rgba(0, 0, 0, .16);
 
-  /* Парение: широкая рассеянная тень плюс короткая контактная. */
-  --float:
-    0 24px 48px -18px rgba(0, 0, 0, .6),
-    0 6px 16px -8px rgba(0, 0, 0, .4);
-  --float-soft: 0 8px 20px -10px rgba(0, 0, 0, .5);
-  --float-high:
-    0 34px 64px -20px rgba(0, 0, 0, .68),
-    0 10px 24px -10px rgba(0, 0, 0, .45);
+  /* Самая мелкая фаска — плитки значков и цветные подложки. */
+  --tile-edge:
+    inset 0 0 0 1px rgba(255, 255, 255, .05),
+    inset 1.2px 1.6px 0 -1px rgba(255, 255, 255, .26),
+    inset -1.2px -1.2px 0 -1px rgba(255, 255, 255, .18),
+    inset 0 2px 3px -2px rgba(0, 0, 0, .35);
 
   /* Утопленный трек: сегмент-контролы, поля ввода, полосы прогресса. */
   --sunk: rgba(0, 0, 0, .3);
@@ -128,10 +144,10 @@ body::before {
   position: fixed; inset: -12%;
   z-index: -1; pointer-events: none;
   background:
-    radial-gradient(104% 60% at 50% -16%, rgba(152, 164, 194, .28), transparent 74%),
-    radial-gradient(76% 46% at 88% 30%, rgba(128, 140, 172, .12), transparent 72%),
-    radial-gradient(78% 48% at 4% 58%, rgba(122, 134, 166, .11), transparent 72%),
-    radial-gradient(88% 52% at 62% 104%, rgba(134, 146, 180, .16), transparent 74%);
+    radial-gradient(110% 62% at 50% -18%, rgba(156, 168, 198, .4), transparent 74%),
+    radial-gradient(80% 48% at 92% 26%, rgba(132, 144, 176, .18), transparent 72%),
+    radial-gradient(82% 50% at 0% 54%, rgba(126, 138, 170, .16), transparent 72%),
+    radial-gradient(92% 54% at 64% 102%, rgba(138, 150, 184, .22), transparent 74%);
 }
 
 button, input, select { font: inherit; color: inherit; letter-spacing: inherit; }
@@ -145,20 +161,20 @@ button { cursor: pointer; }
 .pane, .card, .fund, .op, .balance, .debt, .empty, .chart, .legend,
 .auth-card, .auth-hero {
   position: relative;
-  border: 1px solid var(--edge);
+  border: none;
   border-radius: var(--r-lg);
-  background: var(--fill);
-  backdrop-filter: blur(22px) saturate(140%) contrast(106%);
-  -webkit-backdrop-filter: blur(22px) saturate(140%) contrast(106%);
-  box-shadow: var(--facet), var(--float);
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: var(--glass-edge);
 }
 
 /* Мелочь лежит на уже размытом родителе — ей хватает прозрачной подложки. */
 .group-pill, .icon-btn, .mini-btn, .op-sum, .cat, .chip, .avatar,
 .ghost-btn, .field input, .fund-badge {
-  border: 1px solid var(--edge);
-  background: var(--fill);
-  box-shadow: var(--facet-soft);
+  border: none;
+  background: var(--capsule);
+  box-shadow: var(--capsule-edge);
 }
 
 /* Клиент без backdrop-filter (старые вебвью) получает плотную подложку —
@@ -167,7 +183,7 @@ button { cursor: pointer; }
   .pane, .card, .fund, .op, .balance, .debt, .empty, .chart, .legend,
   .auth-card, .auth-hero, .tabbar, .dock-btn, .sheet-card, .toast,
   .appbar .group-pill, .appbar .icon-btn {
-    background: linear-gradient(146deg, rgba(38, 38, 46, .95), rgba(22, 22, 28, .96));
+    background: var(--glass-solid);
   }
 }
 
@@ -178,11 +194,8 @@ button:active { transform: scale(.96); }
 
 @media (hover: hover) {
   .icon-btn:hover, .mini-btn:hover, .cat:hover, .chip:hover, .group-pill:hover {
-    background: var(--fill-deep);
-    box-shadow:
-      inset 0 1.6px 1px -.6px rgba(255, 255, 255, .8),
-      inset 0 -1px 1px -.6px rgba(0, 0, 0, .35),
-      0 10px 22px -12px rgba(0, 0, 0, .5);
+    background: rgba(255, 255, 255, .07);
+    box-shadow: var(--capsule-edge), 0 8px 20px rgba(0, 0, 0, .22);
   }
 }
 
@@ -241,8 +254,8 @@ button:active { transform: scale(.96); }
   width: 56px; height: 56px; border-radius: 50%;
   display: grid; place-items: center;
   margin-bottom: 22px;
-  background: linear-gradient(160deg, rgba(255, 255, 255, .3), rgba(255, 255, 255, .1));
-  box-shadow: var(--facet-soft), var(--float-soft);
+  background: var(--capsule);
+  box-shadow: var(--capsule-edge);
   font-size: 25px; font-weight: 700; color: #fff;
 }
 .auth-title {
@@ -295,9 +308,10 @@ button:active { transform: scale(.96); }
   position: relative; min-width: 0; max-width: 62%;
   display: flex; align-items: center; gap: 7px;
   border-radius: 999px; padding: 10px 16px;
-  backdrop-filter: blur(30px) saturate(150%);
-  -webkit-backdrop-filter: blur(30px) saturate(150%);
-  box-shadow: var(--facet-soft), var(--float-soft);
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: var(--glass-edge);
 }
 .group-name {
   font-weight: 600; font-size: 14px; letter-spacing: -.02em;
@@ -315,9 +329,10 @@ button:active { transform: scale(.96); }
 }
 .appbar .icon-btn {
   margin-left: auto;
-  backdrop-filter: blur(30px) saturate(150%);
-  -webkit-backdrop-filter: blur(30px) saturate(150%);
-  box-shadow: var(--facet-soft), var(--float-soft);
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: var(--glass-edge);
 }
 
 .panel { display: none; }
@@ -344,11 +359,11 @@ button:active { transform: scale(.96); }
   overflow: hidden;
   border-radius: var(--r-xl); padding: 22px 22px 20px;
   background:
-    linear-gradient(146deg, rgba(10, 132, 255, .62) 0%, rgba(10, 110, 226, .42) 56%,
-                    rgba(255, 255, 255, .06) 100%);
-  backdrop-filter: blur(30px) saturate(150%) contrast(106%);
-  -webkit-backdrop-filter: blur(30px) saturate(150%) contrast(106%);
-  box-shadow: var(--facet), var(--float-high);
+    linear-gradient(146deg, rgba(10, 132, 255, .5) 0%, rgba(10, 110, 226, .3) 56%,
+                    rgba(255, 255, 255, .05) 100%);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: var(--glass-edge);
   color: #fff;
 }
 .fund::after {
@@ -364,8 +379,8 @@ button:active { transform: scale(.96); }
   width: 76px; height: 76px; border-radius: 50%;
   display: grid; place-items: center; align-content: center;
   text-align: center; margin: -2px -2px 0 0;
-  background: rgba(255, 255, 255, .14);
-  box-shadow: var(--facet-soft);
+  background: rgba(0, 0, 0, .18);
+  box-shadow: var(--tile-edge);
 }
 .fund-badge b { font-size: 18px; font-weight: 700; letter-spacing: -.03em; }
 .fund-badge span {
@@ -422,8 +437,8 @@ button:active { transform: scale(.96); }
 .pill-sum {
   display: inline-flex; align-items: center; justify-content: center;
   width: 100%; height: 36px; border-radius: 999px;
-  background: rgba(255, 255, 255, .12);
-  box-shadow: var(--facet-soft);
+  background: rgba(255, 255, 255, .1);
+  box-shadow: var(--tile-edge);
   color: var(--ink);
   font-size: 14px; font-weight: 700; letter-spacing: -.02em;
   font-variant-numeric: tabular-nums;
@@ -454,9 +469,9 @@ button:active { transform: scale(.96); }
 }
 .debt-pay {
   flex: none; height: 32px; padding: 0 15px;
-  border: 1px solid rgba(255, 255, 255, .2); border-radius: 999px;
+  border: none; border-radius: 999px;
   background: linear-gradient(180deg, rgba(10, 132, 255, .95), rgba(10, 132, 255, .78));
-  box-shadow: var(--facet-soft), 0 6px 16px -8px rgba(10, 132, 255, .9);
+  box-shadow: var(--tile-edge), 0 6px 16px -8px rgba(10, 132, 255, .9);
   color: #fff; font-size: 13px; font-weight: 700; letter-spacing: -.01em;
 }
 
@@ -467,14 +482,14 @@ button:active { transform: scale(.96); }
   display: flex; align-items: flex-start; gap: 12px;
   border-radius: var(--r-md); padding: 12px;
   /* Строк в списке много: размытие здесь мягче, чем у постоянных панелей. */
-  backdrop-filter: blur(16px) saturate(140%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
-  box-shadow: var(--facet), var(--float-soft);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: var(--glass-edge);
 }
 .op-icon {
   width: 44px; height: 44px; border-radius: var(--r-xs); flex: none;
   display: grid; place-items: center;
-  box-shadow: var(--facet-soft);
+  box-shadow: var(--tile-edge);
 }
 .op-icon .ic { width: 22px; height: 22px; }
 .op-main { flex: 1; min-width: 0; }
@@ -525,19 +540,18 @@ button:active { transform: scale(.96); }
   display: flex; gap: 2px;
   padding: 5px; margin: 0 0 16px;
   border-radius: 999px;
-  background: var(--sunk);
-  box-shadow: var(--sunk-edge);
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: var(--glass-edge);
 }
 .segmented::after {
   content: ""; position: absolute; z-index: 0;
   top: 5px; bottom: 5px; left: 0;
   width: var(--seg-w, 0); transform: translateX(var(--seg-x, 0));
   border-radius: 999px;
-  background: linear-gradient(160deg, rgba(255, 255, 255, .26), rgba(255, 255, 255, .12));
-  box-shadow:
-    inset 0 1.4px 1px -.6px rgba(255, 255, 255, .75),
-    inset 0 -1.2px 1px -.6px rgba(0, 0, 0, .3),
-    0 6px 14px -8px rgba(0, 0, 0, .6);
+  background: var(--capsule);
+  box-shadow: var(--capsule-edge);
 }
 /* Пружина включается после первой расстановки: иначе линза приезжает
    из левого края на глазах у зрителя. */
@@ -608,7 +622,7 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
 .legend-row:last-child { border-bottom: none; }
 .legend-row.pick {
   background: rgba(255, 255, 255, .1); border-radius: var(--r-xs);
-  box-shadow: 0 0 0 8px rgba(255, 255, 255, .1), var(--facet-soft);
+  box-shadow: 0 0 0 8px rgba(255, 255, 255, .08), var(--tile-edge);
   border-bottom-color: transparent;
 }
 @keyframes rowIn { from { opacity: 0; transform: translateY(8px); } }
@@ -655,22 +669,19 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
   flex: 0 1 auto; min-width: 0;
   display: grid; grid-template-columns: repeat(3, minmax(0, 78px));
   height: var(--tabbar); padding: 5px;
-  border: 1px solid var(--edge); border-radius: 999px;
-  background: var(--fill);
-  backdrop-filter: blur(40px) saturate(150%) contrast(106%);
-  -webkit-backdrop-filter: blur(40px) saturate(150%) contrast(106%);
-  box-shadow: var(--facet), var(--float-high);
+  border: none; border-radius: 999px;
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: var(--glass-edge);
 }
 
 .tabbar::after {
   content: ""; position: absolute; left: 5px; top: 5px;
   width: calc((100% - 10px) / 3); height: calc(var(--tabbar) - 12px);
   border-radius: 999px;
-  background: linear-gradient(160deg, rgba(255, 255, 255, .28), rgba(255, 255, 255, .12));
-  box-shadow:
-    inset 0 1.4px 1px -.6px rgba(255, 255, 255, .8),
-    inset 0 -1.2px 1px -.6px rgba(0, 0, 0, .32),
-    0 8px 18px -10px rgba(0, 0, 0, .7);
+  background: var(--capsule);
+  box-shadow: var(--capsule-edge);
   transition: translate var(--spring);
 }
 .tabbar[data-active="0"]::after { translate: 0 0; }
@@ -698,15 +709,12 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
 .dock-btn {
   width: var(--tabbar); height: var(--tabbar); flex: none;
   display: grid; place-items: center;
-  border: 1px solid rgba(255, 255, 255, .2); border-radius: 50%;
-  background: linear-gradient(155deg, rgba(10, 132, 255, .9), rgba(8, 100, 210, .72));
-  color: #fff;
-  backdrop-filter: blur(40px) saturate(150%);
-  -webkit-backdrop-filter: blur(40px) saturate(150%);
-  box-shadow:
-    var(--facet),
-    0 20px 38px -16px rgba(10, 132, 255, .7),
-    0 8px 18px -10px rgba(0, 0, 0, .5);
+  border: none; border-radius: 50%;
+  background: var(--glass);
+  color: var(--blue);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: var(--glass-edge);
 }
 
 /* --------------------------------------------------------------- форма */
@@ -735,11 +743,11 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
 .sheet-card {
   position: relative; width: 100%; max-width: 560px;
   max-height: 92dvh; display: flex; flex-direction: column;
-  border: 1px solid var(--edge); border-radius: var(--r-xl);
-  background: var(--fill-deep);
-  backdrop-filter: blur(45px) saturate(130%) contrast(104%);
-  -webkit-backdrop-filter: blur(45px) saturate(130%) contrast(104%);
-  box-shadow: var(--facet), var(--float-high);
+  border: none; border-radius: var(--r-xl);
+  background: var(--glass-dense);
+  backdrop-filter: var(--blur-deep);
+  -webkit-backdrop-filter: var(--blur-deep);
+  box-shadow: var(--glass-edge), 0 24px 48px rgba(0, 0, 0, .45);
   animation: slide .42s cubic-bezier(.16, 1, .3, 1);
 }
 @keyframes slide { from { transform: translateY(calc(100% + 16px)); } }
@@ -778,8 +786,7 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
 .field input::placeholder { color: var(--ink-3); }
 .field input:focus {
   outline: none;
-  border-color: rgba(10, 132, 255, .8);
-  box-shadow: var(--sunk-edge), 0 0 0 3px rgba(10, 132, 255, .35);
+  box-shadow: var(--sunk-edge), 0 0 0 3px rgba(10, 132, 255, .4);
 }
 
 .magic { position: relative; }
@@ -788,9 +795,9 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
   position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
   width: 40px; height: 40px; border-radius: 50%;
   display: grid; place-items: center;
-  border: 1px solid rgba(255, 255, 255, .22);
+  border: none;
   background: linear-gradient(155deg, rgba(10, 132, 255, .98), rgba(8, 100, 210, .82));
-  box-shadow: var(--facet-soft), 0 8px 18px -10px rgba(10, 132, 255, .9);
+  box-shadow: var(--tile-edge), 0 8px 18px -10px rgba(10, 132, 255, .9);
   color: #fff;
 }
 .magic-btn:active { transform: translateY(-50%) scale(.94); }
@@ -811,18 +818,19 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
   border-radius: var(--r-sm); padding: 11px 6px 9px;
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   text-align: center; color: var(--ink-2);
+  background: var(--glass);
 }
 .cat-ic {
   width: 36px; height: 36px; border-radius: 12px;
-  display: grid; place-items: center; box-shadow: var(--facet-soft);
+  display: grid; place-items: center; box-shadow: var(--tile-edge);
 }
 .cat-ic .ic { width: 19px; height: 19px; }
 .cat span { font-size: 11px; font-weight: 600; line-height: 1.2; letter-spacing: -.01em; }
 .cat.active {
-  border-color: rgba(10, 132, 255, .7); color: var(--ink);
-  background: linear-gradient(146deg, rgba(10, 132, 255, .32), rgba(10, 132, 255, .14));
-  box-shadow: var(--facet-soft), 0 0 0 1px rgba(10, 132, 255, .5),
-              0 10px 22px -12px rgba(10, 132, 255, .8);
+  color: var(--ink);
+  background: rgba(10, 132, 255, .26);
+  box-shadow: var(--tile-edge), 0 0 0 1px rgba(10, 132, 255, .55),
+              0 8px 20px -12px rgba(10, 132, 255, .8);
 }
 
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -830,18 +838,16 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
   display: inline-flex; align-items: center; gap: 8px;
   border-radius: 999px; padding: 6px 14px 6px 6px;
   color: var(--ink-2); font-size: 13.5px; font-weight: 600; letter-spacing: -.02em;
+  background: var(--glass);
 }
 .chip .avatar { width: 25px; height: 25px; font-size: 11px; }
 .chip.active {
-  border-color: rgba(10, 132, 255, .7); color: var(--ink);
-  background: linear-gradient(146deg, rgba(10, 132, 255, .32), rgba(10, 132, 255, .14));
-  box-shadow: var(--facet-soft), 0 0 0 1px rgba(10, 132, 255, .5),
-              0 10px 22px -12px rgba(10, 132, 255, .8);
+  color: var(--ink);
+  background: rgba(10, 132, 255, .26);
+  box-shadow: var(--tile-edge), 0 0 0 1px rgba(10, 132, 255, .55),
+              0 8px 20px -12px rgba(10, 132, 255, .8);
 }
-.chip.active .avatar {
-  background: linear-gradient(160deg, rgba(255, 255, 255, .34), rgba(255, 255, 255, .16));
-  color: #fff;
-}
+.chip.active .avatar { background: rgba(10, 132, 255, .55); color: #fff; }
 
 .status { min-height: 18px; margin: 0 0 6px; font-size: 13px; color: var(--ink-2); }
 
@@ -849,9 +855,9 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
    рассеянный свет, только тень подкрашена синим. */
 .primary-btn {
   width: 100%; height: 54px; border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, .22);
+  border: none;
   background: linear-gradient(155deg, rgba(10, 132, 255, 1), rgba(8, 104, 216, .88));
-  box-shadow: var(--facet), 0 18px 34px -16px rgba(10, 132, 255, .85);
+  box-shadow: var(--capsule-edge), 0 14px 30px -16px rgba(10, 132, 255, .85);
   color: #fff; font-size: 16px; font-weight: 700; letter-spacing: -.02em;
 }
 .primary-btn:disabled { opacity: .55; }
@@ -865,11 +871,11 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
   position: fixed; left: 50%; transform: translateX(-50%);
   bottom: calc(var(--tabbar) + var(--dock-bottom) + 16px + var(--safe-bottom));
   z-index: 30; max-width: min(420px, calc(100% - 32px));
-  border: 1px solid var(--edge); border-radius: 999px;
-  background: var(--fill-deep);
-  backdrop-filter: blur(30px) saturate(150%);
-  -webkit-backdrop-filter: blur(30px) saturate(150%);
-  box-shadow: var(--facet), var(--float);
+  border: none; border-radius: 999px;
+  background: var(--glass-dense);
+  backdrop-filter: var(--blur-deep);
+  -webkit-backdrop-filter: var(--blur-deep);
+  box-shadow: var(--glass-edge);
   color: var(--ink); padding: 13px 20px;
   font-size: 13.5px; font-weight: 600; letter-spacing: -.02em;
   animation: rise .32s cubic-bezier(.16, 1, .3, 1) both;
