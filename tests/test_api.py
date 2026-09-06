@@ -10,6 +10,10 @@ db = TMP / "api.db"
 if db.exists(): db.unlink()
 os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{db.as_posix()}"
 os.environ["LLM_PROVIDER"] = "off"
+# Вход через Яндекс проверяем выключенным: иначе тест зависел бы от того,
+# заведено ли приложение в .env на конкретной машине.
+os.environ["YANDEX_CLIENT_ID"] = ""
+os.environ["YANDEX_CLIENT_SECRET"] = ""
 os.environ["BOT_TOKEN"] = ""          # бот не поднимется — веб должен жить
 os.environ["SECRET_KEY"] = "test-secret"
 
