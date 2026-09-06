@@ -953,8 +953,8 @@ if (tg) {
   });
   // Интерфейс всегда тёмный, поэтому и шапку клиента красим под него.
   try {
-    tg.setHeaderColor('#0d0d18');
-    tg.setBackgroundColor('#0d0d18');
+    tg.setHeaderColor('#0c0c0f');
+    tg.setBackgroundColor('#0c0c0f');
   } catch (_) { /* старый клиент цвет шапки не умеет */ }
 }
 

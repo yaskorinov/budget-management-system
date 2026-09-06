@@ -1,12 +1,15 @@
 /* -------------------------------------------------------------------------
    Общий бюджет — мини-приложение.
 
-   Оформление держится на одном материале — «жидком стекле» iOS 26. Под всем
-   интерфейсом лежит неподвижное цветное облако (синее, фиолетовое, мятное и
-   розовое пятна), а каждая поверхность — линза над ним: подложка почти
-   прозрачная, фон под ней сгущается по цвету, верхняя грань ловит свет тонкой
-   белой фаской, нижняя отдаёт мягкий рефлекс, тень — рассеянное парение, а не
-   чёрная плита.
+   Оформление держится на одном материале — «жидком стекле» iOS 26. Холст
+   тёмный и нейтральный: сверху мягкий рассеянный свет, по углам чуть более
+   светлые пятна — ровно столько, чтобы стекло было чем преломлять. Каждая
+   поверхность — линза над ним: подложка почти прозрачная, верхняя грань
+   ловит свет тонкой белой фаской, нижняя отдаёт мягкий рефлекс, тень —
+   рассеянное парение, а не чёрная плита.
+
+   Цвет в интерфейсе только у акцента (синий iOS) и у данных — категорий на
+   диаграмме и значках. Фон цвета не несёт.
 
    Размытие стоит денег, поэтому оно распределено по ярусам: тяжёлое — только
    у постоянных поверхностей (шапка, док, шторка), среднее — у карточек,
@@ -20,8 +23,8 @@
    Радиусы концентрические: у вложенного элемента радиус равен внешнему минус
    отступ карточки, поэтому мелких 6–8px в файле нет.
 
-   Тема одна, тёмная: так задумано — светлый полутон Telegram размыл бы
-   цветное облако, на котором держится весь материал.
+   Тема одна, тёмная: так задумано, полутон под светлую тему Telegram сделал
+   бы интерфейс блеклым.
 
    Цвета категорий (пастель) приходят из API и живут только на данных —
    в тексте и органах управления их нет.
@@ -33,17 +36,17 @@
   --ui: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
         "Inter", "Helvetica Neue", "Segoe UI", Roboto, system-ui, sans-serif;
 
-  --bg: #0d0d18;
+  --bg: #0c0c0f;
 
   /* Текст по иерархии Apple: основной, вторичный, третичный. */
   --ink: #ffffff;
   --ink-2: rgba(235, 235, 245, .74);
   --ink-3: rgba(235, 235, 245, .52);
 
-  /* Акцент — синий iOS в тёмном варианте (#0A84FF): на чёрном он читается
-     лучше дневного #007AFF. Остальная палитра (фиолетовый #5E5CE6, мятный
-     #00E5A3, красный #FF453A) живёт в градиентах и подкрашенных заливках,
-     где нужна прозрачность, поэтому задана там rgba, а не токеном. */
+  /* Акцент один — синий iOS в тёмном варианте (#0A84FF): на чёрном он
+     читается лучше дневного #007AFF. Зелёный и красный статусов (#30D158,
+     #FF453A) живут в подкрашенных заливках, где нужна прозрачность, поэтому
+     заданы там rgba, а не токеном. */
   --blue: #0a84ff;
 
   /* Радиусы: внешние карточки, вложенные плитки, мелочь. */
@@ -116,20 +119,19 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Цветное облако под интерфейсом: оно и есть то, что преломляют линзы.
-   Слой неподвижен — стёкла проезжают над ним при прокрутке, и подложка
-   каждой карточки меняет оттенок сама. */
+/* Свет под интерфейсом: неподвижный слой мягкой засветки — сверху основной
+   источник, по углам слабые отражения. Оттенок нейтральный, чуть холодный;
+   это не декор, а то, что преломляют линзы: без него стекло выглядит
+   плоской серой заливкой. */
 body::before {
   content: "";
   position: fixed; inset: -12%;
   z-index: -1; pointer-events: none;
   background:
-    radial-gradient(72% 44% at 20% 0%, rgba(10, 132, 255, .9), transparent 68%),
-    radial-gradient(68% 42% at 88% 10%, rgba(94, 92, 230, .88), transparent 70%),
-    radial-gradient(74% 46% at 80% 40%, rgba(255, 111, 165, .44), transparent 70%),
-    radial-gradient(70% 44% at 10% 42%, rgba(0, 229, 163, .36), transparent 68%),
-    radial-gradient(84% 52% at 50% 72%, rgba(94, 92, 230, .6), transparent 72%),
-    radial-gradient(72% 46% at 16% 100%, rgba(10, 132, 255, .55), transparent 70%);
+    radial-gradient(104% 60% at 50% -16%, rgba(152, 164, 194, .28), transparent 74%),
+    radial-gradient(76% 46% at 88% 30%, rgba(128, 140, 172, .12), transparent 72%),
+    radial-gradient(78% 48% at 4% 58%, rgba(122, 134, 166, .11), transparent 72%),
+    radial-gradient(88% 52% at 62% 104%, rgba(134, 146, 180, .16), transparent 74%);
 }
 
 button, input, select { font: inherit; color: inherit; letter-spacing: inherit; }
@@ -146,8 +148,8 @@ button { cursor: pointer; }
   border: 1px solid var(--edge);
   border-radius: var(--r-lg);
   background: var(--fill);
-  backdrop-filter: blur(22px) saturate(190%) contrast(108%) brightness(.87);
-  -webkit-backdrop-filter: blur(22px) saturate(190%) contrast(108%) brightness(.87);
+  backdrop-filter: blur(22px) saturate(140%) contrast(106%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%) contrast(106%);
   box-shadow: var(--facet), var(--float);
 }
 
@@ -224,7 +226,7 @@ button:active { transform: scale(.96); }
   overflow: hidden;
   border-radius: var(--r-xl); padding: 30px 26px 34px;
   background:
-    linear-gradient(146deg, rgba(10, 132, 255, .5) 0%, rgba(94, 92, 230, .34) 62%,
+    linear-gradient(146deg, rgba(10, 132, 255, .56) 0%, rgba(10, 110, 226, .36) 62%,
                     rgba(255, 255, 255, .06) 100%);
 }
 /* Блик на верхней грани: свет скользит по стеклу, а не заливает карточку. */
@@ -293,8 +295,8 @@ button:active { transform: scale(.96); }
   position: relative; min-width: 0; max-width: 62%;
   display: flex; align-items: center; gap: 7px;
   border-radius: 999px; padding: 10px 16px;
-  backdrop-filter: blur(30px) saturate(200%);
-  -webkit-backdrop-filter: blur(30px) saturate(200%);
+  backdrop-filter: blur(30px) saturate(150%);
+  -webkit-backdrop-filter: blur(30px) saturate(150%);
   box-shadow: var(--facet-soft), var(--float-soft);
 }
 .group-name {
@@ -313,8 +315,8 @@ button:active { transform: scale(.96); }
 }
 .appbar .icon-btn {
   margin-left: auto;
-  backdrop-filter: blur(30px) saturate(200%);
-  -webkit-backdrop-filter: blur(30px) saturate(200%);
+  backdrop-filter: blur(30px) saturate(150%);
+  -webkit-backdrop-filter: blur(30px) saturate(150%);
   box-shadow: var(--facet-soft), var(--float-soft);
 }
 
@@ -342,10 +344,10 @@ button:active { transform: scale(.96); }
   overflow: hidden;
   border-radius: var(--r-xl); padding: 22px 22px 20px;
   background:
-    linear-gradient(146deg, rgba(10, 132, 255, .55) 0%, rgba(94, 92, 230, .38) 58%,
-                    rgba(0, 229, 163, .16) 100%);
-  backdrop-filter: blur(30px) saturate(210%) contrast(108%);
-  -webkit-backdrop-filter: blur(30px) saturate(210%) contrast(108%);
+    linear-gradient(146deg, rgba(10, 132, 255, .62) 0%, rgba(10, 110, 226, .42) 56%,
+                    rgba(255, 255, 255, .06) 100%);
+  backdrop-filter: blur(30px) saturate(150%) contrast(106%);
+  -webkit-backdrop-filter: blur(30px) saturate(150%) contrast(106%);
   box-shadow: var(--facet), var(--float-high);
   color: #fff;
 }
@@ -465,8 +467,8 @@ button:active { transform: scale(.96); }
   display: flex; align-items: flex-start; gap: 12px;
   border-radius: var(--r-md); padding: 12px;
   /* Строк в списке много: размытие здесь мягче, чем у постоянных панелей. */
-  backdrop-filter: blur(16px) saturate(180%) brightness(.87);
-  -webkit-backdrop-filter: blur(16px) saturate(180%) brightness(.87);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
   box-shadow: var(--facet), var(--float-soft);
 }
 .op-icon {
@@ -655,8 +657,8 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
   height: var(--tabbar); padding: 5px;
   border: 1px solid var(--edge); border-radius: 999px;
   background: var(--fill);
-  backdrop-filter: blur(40px) saturate(200%) contrast(108%);
-  -webkit-backdrop-filter: blur(40px) saturate(200%) contrast(108%);
+  backdrop-filter: blur(40px) saturate(150%) contrast(106%);
+  -webkit-backdrop-filter: blur(40px) saturate(150%) contrast(106%);
   box-shadow: var(--facet), var(--float-high);
 }
 
@@ -697,10 +699,10 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
   width: var(--tabbar); height: var(--tabbar); flex: none;
   display: grid; place-items: center;
   border: 1px solid rgba(255, 255, 255, .2); border-radius: 50%;
-  background: linear-gradient(155deg, rgba(10, 132, 255, .82), rgba(94, 92, 230, .6));
+  background: linear-gradient(155deg, rgba(10, 132, 255, .9), rgba(8, 100, 210, .72));
   color: #fff;
-  backdrop-filter: blur(40px) saturate(200%);
-  -webkit-backdrop-filter: blur(40px) saturate(200%);
+  backdrop-filter: blur(40px) saturate(150%);
+  -webkit-backdrop-filter: blur(40px) saturate(150%);
   box-shadow:
     var(--facet),
     0 20px 38px -16px rgba(10, 132, 255, .7),
@@ -716,9 +718,9 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
 }
 .sheet-backdrop {
   position: absolute; inset: 0;
-  background: rgba(4, 4, 8, .5);
-  backdrop-filter: blur(6px) saturate(140%);
-  -webkit-backdrop-filter: blur(6px) saturate(140%);
+  background: rgba(4, 4, 6, .58);
+  backdrop-filter: blur(6px) saturate(110%);
+  -webkit-backdrop-filter: blur(6px) saturate(110%);
   animation: fade .24s ease;
 }
 @keyframes fade { from { opacity: 0; } }
@@ -735,8 +737,8 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
   max-height: 92dvh; display: flex; flex-direction: column;
   border: 1px solid var(--edge); border-radius: var(--r-xl);
   background: var(--fill-deep);
-  backdrop-filter: blur(45px) saturate(210%) contrast(110%) brightness(.8);
-  -webkit-backdrop-filter: blur(45px) saturate(210%) contrast(110%) brightness(.8);
+  backdrop-filter: blur(45px) saturate(130%) contrast(104%);
+  -webkit-backdrop-filter: blur(45px) saturate(130%) contrast(104%);
   box-shadow: var(--facet), var(--float-high);
   animation: slide .42s cubic-bezier(.16, 1, .3, 1);
 }
@@ -787,7 +789,7 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
   width: 40px; height: 40px; border-radius: 50%;
   display: grid; place-items: center;
   border: 1px solid rgba(255, 255, 255, .22);
-  background: linear-gradient(155deg, rgba(10, 132, 255, .95), rgba(94, 92, 230, .8));
+  background: linear-gradient(155deg, rgba(10, 132, 255, .98), rgba(8, 100, 210, .82));
   box-shadow: var(--facet-soft), 0 8px 18px -10px rgba(10, 132, 255, .9);
   color: #fff;
 }
@@ -848,7 +850,7 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
 .primary-btn {
   width: 100%; height: 54px; border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, .22);
-  background: linear-gradient(155deg, rgba(10, 132, 255, .98), rgba(94, 92, 230, .85));
+  background: linear-gradient(155deg, rgba(10, 132, 255, 1), rgba(8, 104, 216, .88));
   box-shadow: var(--facet), 0 18px 34px -16px rgba(10, 132, 255, .85);
   color: #fff; font-size: 16px; font-weight: 700; letter-spacing: -.02em;
 }
@@ -865,8 +867,8 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
   z-index: 30; max-width: min(420px, calc(100% - 32px));
   border: 1px solid var(--edge); border-radius: 999px;
   background: var(--fill-deep);
-  backdrop-filter: blur(30px) saturate(200%);
-  -webkit-backdrop-filter: blur(30px) saturate(200%);
+  backdrop-filter: blur(30px) saturate(150%);
+  -webkit-backdrop-filter: blur(30px) saturate(150%);
   box-shadow: var(--facet), var(--float);
   color: var(--ink); padding: 13px 20px;
   font-size: 13.5px; font-weight: 600; letter-spacing: -.02em;
