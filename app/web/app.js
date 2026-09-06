@@ -91,6 +91,23 @@ function haptic(kind = 'light') {
   } catch (_) { /* старый клиент — не беда */ }
 }
 
+// Сегмент-контрол: линза встаёт по активной кнопке. Ширины у пилюль разные,
+// а панель с ними может быть спрятана (offsetWidth = 0) — тогда расстановку
+// откладываем до момента, когда вкладку покажут.
+function positionThumb(box) {
+  const active = box.querySelector('.active');
+  if (!active || !box.offsetWidth) return;
+  box.style.setProperty('--seg-x', `${active.offsetLeft}px`);
+  box.style.setProperty('--seg-w', `${active.offsetWidth}px`);
+  if (box.dataset.ready) return;
+  // Пружину включаем следующим кадром, иначе линза приедет из левого края.
+  requestAnimationFrame(() => { box.dataset.ready = '1'; });
+}
+
+function syncSegments() {
+  document.querySelectorAll('.segmented').forEach(positionThumb);
+}
+
 function toast(message) {
   const node = $('toast');
   node.textContent = message;
@@ -400,7 +417,7 @@ function operationRow(operation) {
   const row = el('div', `op${contribution ? ' in' : ''}`);
 
   const badge = el('div', 'op-icon');
-  const color = transfer ? '#1689ff'
+  const color = transfer ? '#0a84ff'
     : contribution ? '#30d158'
       : category ? category.color : '#8e8d88';
   badge.style.background = tint(color, 0.18);
@@ -525,18 +542,19 @@ function updateKindFields() {
   $('purchase-fields').classList.toggle('open', purchase);
   $('purchase-details').classList.toggle('open', purchase);
   $('payee-field').classList.toggle('open', transfer);
-  $('kind-switch').dataset.active = purchase ? '0' : '1';
   $('submit').textContent = state.editing
     ? 'Сохранить изменения'
     : purchase ? 'Записать покупку'
       : transfer ? 'Записать возврат' : 'Внести в фонд';
-  document.querySelectorAll('#kind-switch .sw').forEach((button) =>
+  document.querySelectorAll('#kind-switch .seg-btn').forEach((button) =>
     button.classList.toggle('active', button.dataset.kind === state.kind));
+  positionThumb($('kind-switch'));
 }
 
 function openSheet() {
   $('sheet').hidden = false;
   document.body.style.overflow = 'hidden';
+  positionThumb($('kind-switch'));
   try {
     if (tg && tg.BackButton) {
       tg.BackButton.show();
@@ -857,6 +875,7 @@ function switchTab(name) {
     bar.classList.add('bump');
   }
 
+  syncSegments();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -866,6 +885,7 @@ function bindGroup(id, key, onChange) {
       document.querySelectorAll(`#${id} > *`).forEach((other) =>
         other.classList.toggle('active', other === button));
       state[key] = button.dataset[key];
+      positionThumb(button.parentElement);
       onChange();
     };
   });
@@ -933,10 +953,13 @@ if (tg) {
   });
   // Интерфейс всегда тёмный, поэтому и шапку клиента красим под него.
   try {
-    tg.setHeaderColor('#141414');
-    tg.setBackgroundColor('#141414');
+    tg.setHeaderColor('#0d0d18');
+    tg.setBackgroundColor('#0d0d18');
   } catch (_) { /* старый клиент цвет шапки не умеет */ }
 }
 
+window.addEventListener('resize', syncSegments);
+
 updateKindFields();
+syncSegments();
 authenticate();

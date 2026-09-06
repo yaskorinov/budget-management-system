@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#141414">
+<meta name="theme-color" content="#0d0d18">
 <title>Общий бюджет</title>
 <link rel="stylesheet" href="/styles.css">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -113,24 +113,24 @@
 
     <!-- ------------------------------------------------------ операции -->
     <section id="tab-ops" class="panel">
-      <div class="tabs-text" id="scope-switch">
-        <button class="tt active" data-scope="all">Все</button>
-        <button class="tt" data-scope="mine">Только мои</button>
+      <div class="segmented equal" id="scope-switch">
+        <button class="seg-btn active" data-scope="all">Все</button>
+        <button class="seg-btn" data-scope="mine">Только мои</button>
       </div>
       <div id="ops-list" class="ops"></div>
     </section>
 
     <!-- ---------------------------------------------------- статистика -->
     <section id="tab-stats" class="panel">
-      <div class="tabs-text" id="mode-switch">
-        <button class="tt active" data-mode="categories">Категории</button>
-        <button class="tt" data-mode="people">Люди</button>
+      <div class="segmented equal" id="mode-switch">
+        <button class="seg-btn active" data-mode="categories">Категории</button>
+        <button class="seg-btn" data-mode="people">Люди</button>
       </div>
-      <div class="pills" id="period-switch">
-        <button class="pill active" data-period="month">Этот месяц</button>
-        <button class="pill" data-period="prev_month">Прошлый месяц</button>
-        <button class="pill" data-period="week">Неделя</button>
-        <button class="pill" data-period="all">Всё время</button>
+      <div class="segmented scroll" id="period-switch">
+        <button class="seg-btn active" data-period="month">Этот месяц</button>
+        <button class="seg-btn" data-period="prev_month">Прошлый месяц</button>
+        <button class="seg-btn" data-period="week">Неделя</button>
+        <button class="seg-btn" data-period="all">Всё время</button>
       </div>
 
       <div class="stats-grid">
@@ -191,11 +191,11 @@
     </div>
 
     <div class="sheet-body">
-      <div class="switch" id="kind-switch" data-active="0">
-        <button type="button" class="sw active" data-kind="purchase">
+      <div class="segmented equal" id="kind-switch">
+        <button type="button" class="seg-btn active" data-kind="purchase">
           <svg class="ic ic-18"><use href="#i-cart"/></svg>Покупка
         </button>
-        <button type="button" class="sw" id="kind-second" data-kind="contribution">
+        <button type="button" class="seg-btn" id="kind-second" data-kind="contribution">
           <svg class="ic ic-18"><use href="#i-wallet"/></svg><span>Взнос</span>
         </button>
       </div>

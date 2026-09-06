@@ -1,18 +1,27 @@
 /* -------------------------------------------------------------------------
    Общий бюджет — мини-приложение.
 
-   Раскладка держится на двух режимах. На телефоне это витрина: баннер
-   остатка, крупные текстовые вкладки, ряд фильтров-пилюль и сетка карточек,
-   а навигация — плавающая пилюля со стеклом внизу. На широком экране колонка
-   разворачивается во всю ширину, сетки набирают столбцы, а панель сжимается
-   по содержимому и остаётся по центру низа.
+   Оформление держится на одном материале — «жидком стекле» iOS 26. Под всем
+   интерфейсом лежит неподвижное цветное облако (синее, фиолетовое, мятное и
+   розовое пятна), а каждая поверхность — линза над ним: подложка почти
+   прозрачная, фон под ней сгущается по цвету, верхняя грань ловит свет тонкой
+   белой фаской, нижняя отдаёт мягкий рефлекс, тень — рассеянное парение, а не
+   чёрная плита.
 
-   Тема одна, тёмная: интерфейс так и задуман, полутон под светлую тему
-   Telegram сделал бы его блеклым.
+   Размытие стоит денег, поэтому оно распределено по ярусам: тяжёлое — только
+   у постоянных поверхностей (шапка, док, шторка), среднее — у карточек,
+   а мелкие органы управления лежат на уже размытом родителе и обходятся
+   подложкой с прозрачностью и фасками.
 
-   Шрифт и значки системные: на iOS это San Francisco и Apple Color Emoji.
-   Рисованные иконки остались только в нижней панели — там нужна залитая
-   версия для выбранной вкладки.
+   Раскладка прежняя: на телефоне витрина в одну колонку, на широком экране
+   сетки набирают столбцы. Навигация внизу — два острова: капсула вкладок и
+   отдельная круглая кнопка действия; оба парят, не прижимаясь к краю.
+
+   Радиусы концентрические: у вложенного элемента радиус равен внешнему минус
+   отступ карточки, поэтому мелких 6–8px в файле нет.
+
+   Тема одна, тёмная: так задумано — светлый полутон Telegram размыл бы
+   цветное облако, на котором держится весь материал.
 
    Цвета категорий (пастель) приходят из API и живут только на данных —
    в тексте и органах управления их нет.
@@ -21,59 +30,71 @@
 :root {
   color-scheme: dark;
 
-  --ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
-        "Helvetica Neue", "Segoe UI", Roboto, system-ui, sans-serif;
-  --bg: #141414;
-  --bg-deep: #0a0a0a;
-  --card: #1a1a1a;
-  --card-2: #1e1e1e;
-  --sunk: #282727;
-  --line: #2d2d2d;
+  --ui: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+        "Inter", "Helvetica Neue", "Segoe UI", Roboto, system-ui, sans-serif;
 
+  --bg: #0d0d18;
+
+  /* Текст по иерархии Apple: основной, вторичный, третичный. */
   --ink: #ffffff;
-  --ink-2: #ffffffb3;
-  --ink-3: #ffffff66;
-  --ink-4: #3a3a3a;
+  --ink-2: rgba(235, 235, 245, .74);
+  --ink-3: rgba(235, 235, 245, .52);
 
-  --primary: #1689ff;
-  --primary-deep: #0b5fd0;
-  --good: #30d158;
-  --bad: #ff3f46;
-  --gold: #f1aa05;
+  /* Акцент — синий iOS в тёмном варианте (#0A84FF): на чёрном он читается
+     лучше дневного #007AFF. Остальная палитра (фиолетовый #5E5CE6, мятный
+     #00E5A3, красный #FF453A) живёт в градиентах и подкрашенных заливках,
+     где нужна прозрачность, поэтому задана там rgba, а не токеном. */
+  --blue: #0a84ff;
 
-  --r-card: 20px;
-  --r-md: 16px;
-  --r-sm: 12px;
+  /* Радиусы: внешние карточки, вложенные плитки, мелочь. */
+  --r-xl: 36px;
+  --r-lg: 32px;
+  --r-md: 26px;
+  --r-sm: 18px;
+  --r-xs: 14px;
 
-  --shadow: 0 4px 18px rgba(0, 0, 0, .35);
+  /* Пружина Apple — все переходы идут по ней, линейных в файле нет. */
+  --spring: .45s cubic-bezier(.16, 1, .3, 1);
+  --spring-fast: .28s cubic-bezier(.16, 1, .3, 1);
 
-  /* Стекло: почти прозрачная подложка, а объём дают внутренние блики. */
-  --glass: rgba(0, 0, 0, .12);
-  --glass-solid: #1c1c1c;
-  --glass-edge:
-    inset 0 0 0 1px rgba(255, 255, 255, .06),
-    inset 1.8px 3px 0 -2px rgba(255, 255, 255, .27),
-    inset -2px -2px 0 -2px rgba(255, 255, 255, .22),
-    inset -3px -8px 1px -6px rgba(255, 255, 255, .16),
-    inset 0 3px 4px -2px rgba(0, 0, 0, .4),
-    0 1px 5px rgba(0, 0, 0, .2),
-    0 6px 16px rgba(0, 0, 0, .16);
+  /* -------- материал ---------------------------------------------------- */
 
-  /* Грань подвижной капсулы: тот же приём, что и у панели, но плотнее. */
-  --capsule: rgba(0, 0, 0, .3);
-  --capsule-edge:
-    inset 0 0 0 1px rgba(255, 255, 255, .03),
-    inset 2px 1px 0 -1px rgba(255, 255, 255, .27),
-    inset -1.5px -1px 0 -1px rgba(255, 255, 255, .24),
-    inset -2px -6px 1px -5px rgba(255, 255, 255, .18),
-    inset -1px 2px 3px -1px rgba(0, 0, 0, .4),
-    inset 0 -4px 1px -2px rgba(0, 0, 0, .2),
-    0 3px 6px rgba(0, 0, 0, .16);
+  /* Подложка: свет падает сверху слева, поэтому градиент идёт по диагонали. */
+  --fill: linear-gradient(146deg, rgba(255, 255, 255, .17) 0%, rgba(255, 255, 255, .07) 100%);
+  --fill-deep: linear-gradient(146deg, rgba(255, 255, 255, .22) 0%, rgba(255, 255, 255, .1) 100%);
+  --edge: rgba(255, 255, 255, .14);
+
+  /* Фаска: верхний скол, нижний рефлекс и подсветка боковых граней. */
+  --facet:
+    inset 0 1.4px 1px -.7px rgba(255, 255, 255, .6),
+    inset 1px 0 1px -.9px rgba(255, 255, 255, .22),
+    inset -1px 0 1px -.9px rgba(255, 255, 255, .18),
+    inset 0 -1.2px 1px -.7px rgba(0, 0, 0, .45);
+
+  /* Тонкая фаска — для мелочи, где толстый скол смотрится как обводка. */
+  --facet-soft:
+    inset 0 1px 1px -.6px rgba(255, 255, 255, .45),
+    inset 0 -1px 1px -.6px rgba(0, 0, 0, .35);
+
+  /* Парение: широкая рассеянная тень плюс короткая контактная. */
+  --float:
+    0 24px 48px -18px rgba(0, 0, 0, .6),
+    0 6px 16px -8px rgba(0, 0, 0, .4);
+  --float-soft: 0 8px 20px -10px rgba(0, 0, 0, .5);
+  --float-high:
+    0 34px 64px -20px rgba(0, 0, 0, .68),
+    0 10px 24px -10px rgba(0, 0, 0, .45);
+
+  /* Утопленный трек: сегмент-контролы, поля ввода, полосы прогресса. */
+  --sunk: rgba(0, 0, 0, .3);
+  --sunk-edge:
+    inset 0 1.5px 2px rgba(0, 0, 0, .5),
+    inset 0 -1px 1px -.5px rgba(255, 255, 255, .12);
 
   --wide: 1440px;
-  --pad: 16px;
-  --tabbar: 62px;
-  --tabbar-gap: 10px;
+  --pad: 18px;
+  --tabbar: 60px;
+  --dock-bottom: 24px;
 
   /* Telegram отдаёт свои отступы в app.js; env() — запасной вариант. */
   --safe-top: env(safe-area-inset-top, 0px);
@@ -90,15 +111,80 @@ body {
   background: var(--bg);
   color: var(--ink);
   font: 400 15px/1.45 var(--ui);
+  letter-spacing: -.01em;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
 }
 
-button, input, select { font: inherit; color: inherit; }
+/* Цветное облако под интерфейсом: оно и есть то, что преломляют линзы.
+   Слой неподвижен — стёкла проезжают над ним при прокрутке, и подложка
+   каждой карточки меняет оттенок сама. */
+body::before {
+  content: "";
+  position: fixed; inset: -12%;
+  z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(72% 44% at 20% 0%, rgba(10, 132, 255, .9), transparent 68%),
+    radial-gradient(68% 42% at 88% 10%, rgba(94, 92, 230, .88), transparent 70%),
+    radial-gradient(74% 46% at 80% 40%, rgba(255, 111, 165, .44), transparent 70%),
+    radial-gradient(70% 44% at 10% 42%, rgba(0, 229, 163, .36), transparent 68%),
+    radial-gradient(84% 52% at 50% 72%, rgba(94, 92, 230, .6), transparent 72%),
+    radial-gradient(72% 46% at 16% 100%, rgba(10, 132, 255, .55), transparent 70%);
+}
+
+button, input, select { font: inherit; color: inherit; letter-spacing: inherit; }
 button { cursor: pointer; }
 
 .sprite { display: none; }
 
+/* -------------------------------------------------------------- материал */
+
+/* Крупные поверхности: настоящая линза с размытием фона. */
+.pane, .card, .fund, .op, .balance, .debt, .empty, .chart, .legend,
+.auth-card, .auth-hero {
+  position: relative;
+  border: 1px solid var(--edge);
+  border-radius: var(--r-lg);
+  background: var(--fill);
+  backdrop-filter: blur(22px) saturate(190%) contrast(108%) brightness(.87);
+  -webkit-backdrop-filter: blur(22px) saturate(190%) contrast(108%) brightness(.87);
+  box-shadow: var(--facet), var(--float);
+}
+
+/* Мелочь лежит на уже размытом родителе — ей хватает прозрачной подложки. */
+.group-pill, .icon-btn, .mini-btn, .op-sum, .cat, .chip, .avatar,
+.ghost-btn, .field input, .fund-badge {
+  border: 1px solid var(--edge);
+  background: var(--fill);
+  box-shadow: var(--facet-soft);
+}
+
+/* Клиент без backdrop-filter (старые вебвью) получает плотную подложку —
+   иначе текст ляжет прямо на цветное облако. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .pane, .card, .fund, .op, .balance, .debt, .empty, .chart, .legend,
+  .auth-card, .auth-hero, .tabbar, .dock-btn, .sheet-card, .toast,
+  .appbar .group-pill, .appbar .icon-btn {
+    background: linear-gradient(146deg, rgba(38, 38, 46, .95), rgba(22, 22, 28, .96));
+  }
+}
+
+/* Нажатие — ощутимый прожим, ховер слегка доворачивает угол освещения. */
+button { transition: transform var(--spring-fast), box-shadow var(--spring),
+                     background var(--spring), color var(--spring-fast); }
+button:active { transform: scale(.96); }
+
+@media (hover: hover) {
+  .icon-btn:hover, .mini-btn:hover, .cat:hover, .chip:hover, .group-pill:hover {
+    background: var(--fill-deep);
+    box-shadow:
+      inset 0 1.6px 1px -.6px rgba(255, 255, 255, .8),
+      inset 0 -1px 1px -.6px rgba(0, 0, 0, .35),
+      0 10px 22px -12px rgba(0, 0, 0, .5);
+  }
+}
+
+/* ------------------------------------------------------------------ мелочи */
 
 .caret {
   width: 7px; height: 7px; flex: none;
@@ -122,8 +208,8 @@ button { cursor: pointer; }
 
 .eyebrow {
   display: block;
-  font-size: 10.5px; font-weight: 600; letter-spacing: .12em;
-  text-transform: uppercase; color: var(--ink-3);
+  font-size: 10.5px; font-weight: 600; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-2);
 }
 
 /* ------------------------------------------------------------------ вход */
@@ -132,24 +218,30 @@ button { cursor: pointer; }
   min-height: 100vh; min-height: 100dvh;
   display: flex; flex-direction: column; justify-content: center;
   padding: 24px var(--pad) calc(24px + var(--safe-bottom));
-  gap: 16px;
+  gap: 14px;
 }
 .auth-hero {
-  position: relative; overflow: hidden;
-  border-radius: 28px; padding: 30px 26px 34px;
-  background: linear-gradient(150deg, var(--primary), var(--primary-deep) 62%, #0a2f63);
+  overflow: hidden;
+  border-radius: var(--r-xl); padding: 30px 26px 34px;
+  background:
+    linear-gradient(146deg, rgba(10, 132, 255, .5) 0%, rgba(94, 92, 230, .34) 62%,
+                    rgba(255, 255, 255, .06) 100%);
 }
+/* Блик на верхней грани: свет скользит по стеклу, а не заливает карточку. */
 .auth-hero::after {
-  content: ""; position: absolute; right: -60px; top: -90px;
-  width: 240px; height: 240px; border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 255, 255, .28), transparent 65%);
+  content: ""; position: absolute; right: -70px; top: -110px;
+  width: 250px; height: 250px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, .3), transparent 66%);
+  pointer-events: none;
 }
 .auth-badge {
   position: relative; z-index: 1;
-  width: 54px; height: 54px; border-radius: 50%;
-  background: rgba(0, 0, 0, .28); color: #fff;
+  width: 56px; height: 56px; border-radius: 50%;
   display: grid; place-items: center;
-  font-size: 25px; font-weight: 700; margin-bottom: 22px;
+  margin-bottom: 22px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, .3), rgba(255, 255, 255, .1));
+  box-shadow: var(--facet-soft), var(--float-soft);
+  font-size: 25px; font-weight: 700; color: #fff;
 }
 .auth-title {
   position: relative; z-index: 1; margin: 0;
@@ -161,131 +253,161 @@ button { cursor: pointer; }
   margin: 14px 0 0; max-width: 24em;
   font-size: 15px; line-height: 1.4; color: rgba(255, 255, 255, .82);
 }
-.auth-card { background: var(--card); border-radius: var(--r-card); padding: 20px 22px 22px; }
-.auth-status { margin: 0; font-size: 16px; font-weight: 600; }
+.auth-card { padding: 20px 22px 22px; }
+.auth-status { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -.02em; }
 .auth-hint { margin: 9px 0 0; font-size: 13.5px; color: var(--ink-2); }
-.auth-hint b { background: var(--sunk); border-radius: 6px; padding: 1px 6px; font-weight: 600; }
+.auth-hint b {
+  background: rgba(255, 255, 255, .12); border-radius: 999px;
+  padding: 1px 9px; font-weight: 600;
+}
 
 /* --------------------------------------------------------------- каркас */
 
 #app {
   max-width: var(--wide); margin: 0 auto;
   padding: var(--safe-top) var(--pad)
-           calc(var(--tabbar) + var(--tabbar-gap) * 2 + 26px + var(--safe-bottom));
+           calc(var(--tabbar) + var(--dock-bottom) + 22px + var(--safe-bottom));
 }
 
+/* Парящая шапка: сплошной плашки нет, есть две стеклянные пилюли. Контент
+   уходит под них и по дороге размывается — за это отвечает ::before с
+   маской, размытие в нём затухает к низу, а не обрывается линией. */
 .appbar {
   position: sticky; top: 0; z-index: 8;
   display: flex; align-items: center; gap: 10px;
-  padding: 12px 0 10px;
-  background: linear-gradient(var(--bg) 74%, transparent);
+  padding: calc(10px + var(--safe-top)) 0 10px;
+  margin-top: calc(var(--safe-top) * -1);
+}
+.appbar::before {
+  content: ""; position: absolute; z-index: -1;
+  inset: calc(var(--safe-top) * -1 - 10px) calc(var(--pad) * -1) -14px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  background: linear-gradient(rgba(13, 13, 24, .5), rgba(13, 13, 24, 0));
+  mask-image: linear-gradient(#000 62%, transparent);
+  -webkit-mask-image: linear-gradient(#000 62%, transparent);
+  pointer-events: none;
 }
 
 .group-pill {
   position: relative; min-width: 0; max-width: 62%;
   display: flex; align-items: center; gap: 7px;
-  background: var(--card); border-radius: 999px; padding: 10px 16px;
+  border-radius: 999px; padding: 10px 16px;
+  backdrop-filter: blur(30px) saturate(200%);
+  -webkit-backdrop-filter: blur(30px) saturate(200%);
+  box-shadow: var(--facet-soft), var(--float-soft);
 }
 .group-name {
-  font-weight: 600; font-size: 14px;
+  font-weight: 600; font-size: 14px; letter-spacing: -.02em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .group-pill select {
   position: absolute; inset: 0; width: 100%; height: 100%;
-  opacity: 0; border: none; background: none; appearance: none;
+  opacity: 0; border: none; background: none; appearance: none; cursor: pointer;
 }
 
 .icon-btn {
-  width: 40px; height: 40px; flex: none;
+  width: 42px; height: 42px; flex: none;
   display: grid; place-items: center;
-  border-radius: 50%; border: none;
-  background: var(--card); color: var(--ink-2);
+  border-radius: 50%; color: var(--ink-2);
 }
-.appbar .icon-btn { margin-left: auto; }
-.icon-btn:active { transform: scale(.94); }
+.appbar .icon-btn {
+  margin-left: auto;
+  backdrop-filter: blur(30px) saturate(200%);
+  -webkit-backdrop-filter: blur(30px) saturate(200%);
+  box-shadow: var(--facet-soft), var(--float-soft);
+}
 
 .panel { display: none; }
-.panel.active { display: block; animation: rise .22s ease both; }
-@keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+.panel.active { display: block; animation: rise .32s cubic-bezier(.16, 1, .3, 1) both; }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } }
 
-.panel-title {
-  margin: 4px 0 14px;
-  font-size: 26px; font-weight: 700; letter-spacing: -.03em;
-}
 .section-title {
-  margin: 22px 0 10px;
-  font-size: 13px; font-weight: 600; letter-spacing: .1em;
-  text-transform: uppercase; color: var(--ink-3);
+  margin: 24px 0 10px;
+  font-size: 12.5px; font-weight: 600; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-2);
 }
 .section-head { display: flex; align-items: baseline; justify-content: space-between; }
 .link-btn {
   display: inline-flex; align-items: center; gap: 5px;
-  border: none; background: none; color: var(--primary);
+  border: none; background: none; color: var(--blue);
   font-size: 13.5px; font-weight: 600; padding: 0;
 }
 
-.card { background: var(--card); border-radius: var(--r-card); }
-
 /* ---------------------------------------------------------- баннер фонда */
 
+/* Единственная цветная линза в интерфейсе: тот же материал, но подкрашенный
+   акцентом — синий уходит в фиолетовый, как градиентный тинт iOS. */
 .fund {
-  position: relative; overflow: hidden;
-  border-radius: var(--r-card); padding: 20px 20px 18px;
-  background: linear-gradient(115deg, var(--primary), var(--primary-deep) 58%, #08346f);
+  overflow: hidden;
+  border-radius: var(--r-xl); padding: 22px 22px 20px;
+  background:
+    linear-gradient(146deg, rgba(10, 132, 255, .55) 0%, rgba(94, 92, 230, .38) 58%,
+                    rgba(0, 229, 163, .16) 100%);
+  backdrop-filter: blur(30px) saturate(210%) contrast(108%);
+  -webkit-backdrop-filter: blur(30px) saturate(210%) contrast(108%);
+  box-shadow: var(--facet), var(--float-high);
   color: #fff;
 }
 .fund::after {
-  content: ""; position: absolute; right: -70px; top: -110px;
-  width: 250px; height: 250px; border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 255, 255, .3), transparent 66%);
+  content: ""; position: absolute; right: -70px; top: -120px;
+  width: 260px; height: 260px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, .28), transparent 66%);
   pointer-events: none;
 }
 .fund-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.fund .eyebrow { color: rgba(255, 255, 255, .68); }
+.fund .eyebrow { color: rgba(255, 255, 255, .72); }
 .fund-badge {
   position: relative; z-index: 1;
-  width: 74px; height: 74px; border-radius: 50%;
-  background: rgba(0, 0, 0, .26);
+  width: 76px; height: 76px; border-radius: 50%;
   display: grid; place-items: center; align-content: center;
   text-align: center; margin: -2px -2px 0 0;
+  background: rgba(255, 255, 255, .14);
+  box-shadow: var(--facet-soft);
 }
-.fund-badge b { font-size: 18px; font-weight: 700; letter-spacing: -.02em; }
+.fund-badge b { font-size: 18px; font-weight: 700; letter-spacing: -.03em; }
 .fund-badge span {
   font-size: 8.5px; font-weight: 600; letter-spacing: .05em;
-  text-transform: uppercase; padding: 0 6px; color: rgba(255, 255, 255, .8);
+  text-transform: uppercase; padding: 0 6px; color: rgba(255, 255, 255, .82);
 }
 .fund-value {
-  position: relative; z-index: 1; margin-top: 6px;
+  position: relative; z-index: 1; margin-top: 8px;
   font-size: clamp(36px, 11vw, 48px); font-weight: 700;
   letter-spacing: -.04em; line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 .meter {
-  height: 7px; border-radius: 999px; margin: 16px 0 13px;
-  background: rgba(255, 255, 255, .22); overflow: hidden;
+  position: relative; z-index: 1;
+  height: 8px; border-radius: 999px; margin: 18px 0 14px;
+  background: rgba(0, 0, 0, .28); box-shadow: var(--sunk-edge); overflow: hidden;
 }
-.meter i { display: block; height: 100%; border-radius: 999px; background: #fff; transition: width .4s ease; }
-.fund-foot { display: flex; gap: 24px; }
+.meter i {
+  display: block; height: 100%; border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .95), rgba(255, 255, 255, .72));
+  box-shadow: 0 0 12px rgba(255, 255, 255, .45);
+  transition: width var(--spring);
+}
+.fund-foot { position: relative; z-index: 1; display: flex; gap: 24px; }
 /* В дележе полосы расхода нет — отступ под числом задаём сами. */
-.meter[hidden] + .fund-foot { margin-top: 16px; }
+.meter[hidden] + .fund-foot { margin-top: 18px; }
 .fund-foot b {
   display: block; margin-top: 3px;
-  font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums;
+  font-size: 15px; font-weight: 600; letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
 }
 
 /* -------------------------------------------------------------- балансы */
 
 .balances { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-.balance { background: var(--card); border-radius: var(--r-card); padding: 12px; }
+.balance { border-radius: var(--r-md); padding: 13px; }
 .balance-top { display: flex; align-items: center; gap: 8px; }
 .avatar {
-  width: 26px; height: 26px; border-radius: 50%; flex: none;
+  width: 27px; height: 27px; border-radius: 50%; flex: none;
   display: grid; place-items: center;
-  background: var(--sunk); color: var(--ink-2);
-  font-size: 12px; font-weight: 600;
+  color: var(--ink-2); font-size: 12px; font-weight: 600;
 }
 .balance-name {
-  font-size: 14px; font-weight: 600;
+  font-size: 14px; font-weight: 600; letter-spacing: -.02em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .balance-note {
@@ -293,17 +415,20 @@ button { cursor: pointer; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
-/* Сумма — заполненная пилюля, как ценник на витрине, а не просто текст. */
+/* Сумма — подкрашенная капсула: заливка держит цвет статуса, но остаётся
+   полупрозрачной, поэтому под ней виден тот же материал. */
 .pill-sum {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 100%; height: 34px; border-radius: 999px;
-  background: var(--primary); color: #fff;
-  font-size: 14px; font-weight: 700; letter-spacing: -.01em;
+  width: 100%; height: 36px; border-radius: 999px;
+  background: rgba(255, 255, 255, .12);
+  box-shadow: var(--facet-soft);
+  color: var(--ink);
+  font-size: 14px; font-weight: 700; letter-spacing: -.02em;
   font-variant-numeric: tabular-nums;
 }
-.pill-sum.pos { background: var(--good); color: #06240f; }
-.pill-sum.neg { background: var(--bad); }
-.pill-sum.flat { background: var(--sunk); color: var(--ink-2); }
+.pill-sum.pos { background: rgba(48, 209, 88, .24); color: #7cf29b; }
+.pill-sum.neg { background: rgba(255, 69, 58, .24); color: #ff9d96; }
+.pill-sum.flat { background: rgba(255, 255, 255, .08); color: var(--ink-2); }
 
 /* --------------------------------------------------- кто кому должен */
 
@@ -311,42 +436,48 @@ button { cursor: pointer; }
 .debts { display: grid; gap: 8px; }
 .debt {
   display: flex; align-items: center; gap: 10px;
-  background: var(--card); border-radius: var(--r-card); padding: 12px;
+  border-radius: var(--r-md); padding: 12px 14px;
 }
 .debt-who {
   flex: 1; min-width: 0;
   display: flex; align-items: center; gap: 6px;
-  font-size: 13.5px; font-weight: 600;
+  font-size: 13.5px; font-weight: 600; letter-spacing: -.02em;
 }
 .debt-who .ic { color: var(--ink-3); }
+.debt-who .avatar { width: 24px; height: 24px; font-size: 11px; }
 .debt-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .debt-sum {
-  flex: none; font-size: 14px; font-weight: 700;
+  flex: none; font-size: 14px; font-weight: 700; letter-spacing: -.02em;
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .debt-pay {
-  flex: none; height: 30px; padding: 0 14px;
-  border: none; border-radius: 999px;
-  background: var(--primary); color: #fff;
-  font-size: 13px; font-weight: 700;
+  flex: none; height: 32px; padding: 0 15px;
+  border: 1px solid rgba(255, 255, 255, .2); border-radius: 999px;
+  background: linear-gradient(180deg, rgba(10, 132, 255, .95), rgba(10, 132, 255, .78));
+  box-shadow: var(--facet-soft), 0 6px 16px -8px rgba(10, 132, 255, .9);
+  color: #fff; font-size: 13px; font-weight: 700; letter-spacing: -.01em;
 }
-.debt-pay:active { transform: scale(.94); }
 
 /* ------------------------------------------------------------- операции */
 
 .ops { display: grid; gap: 10px; }
 .op {
   display: flex; align-items: flex-start; gap: 12px;
-  background: var(--card); border-radius: var(--r-card); padding: 12px;
+  border-radius: var(--r-md); padding: 12px;
+  /* Строк в списке много: размытие здесь мягче, чем у постоянных панелей. */
+  backdrop-filter: blur(16px) saturate(180%) brightness(.87);
+  -webkit-backdrop-filter: blur(16px) saturate(180%) brightness(.87);
+  box-shadow: var(--facet), var(--float-soft);
 }
 .op-icon {
-  width: 44px; height: 44px; border-radius: var(--r-sm); flex: none;
+  width: 44px; height: 44px; border-radius: var(--r-xs); flex: none;
   display: grid; place-items: center;
+  box-shadow: var(--facet-soft);
 }
 .op-icon .ic { width: 22px; height: 22px; }
 .op-main { flex: 1; min-width: 0; }
 .op-title {
-  font-size: 14.5px; font-weight: 600;
+  font-size: 14.5px; font-weight: 600; letter-spacing: -.025em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .op-meta {
@@ -358,70 +489,95 @@ button { cursor: pointer; }
 .op-foot { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
 .op-actions { display: flex; gap: 6px; margin-left: auto; }
 .op-sum {
-  height: 32px; padding: 0 12px; border-radius: 999px;
+  height: 34px; padding: 0 13px; border-radius: 999px;
   display: inline-flex; align-items: center;
-  background: var(--sunk); color: var(--ink);
-  font-size: 13.5px; font-weight: 700; white-space: nowrap;
-  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  font-size: 13.5px; font-weight: 700; letter-spacing: -.02em;
+  white-space: nowrap; font-variant-numeric: tabular-nums;
 }
-.op.in .op-sum { background: var(--good); color: #06240f; }
+.op.in .op-sum { background: rgba(48, 209, 88, .24); color: #7cf29b; }
 .mini-btn {
-  width: 32px; height: 32px; display: grid; place-items: center;
-  border: none; border-radius: 50%;
-  background: var(--sunk); color: var(--ink-2);
+  width: 34px; height: 34px; display: grid; place-items: center;
+  border-radius: 50%; color: var(--ink-2);
 }
 .mini-btn .ic { width: 16px; height: 16px; }
-.mini-btn.danger { color: var(--bad); }
-.mini-btn.danger { background: rgba(255, 63, 70, .16); }
-.mini-btn:active { transform: scale(.92); }
+.mini-btn.danger { background: rgba(255, 69, 58, .2); color: #ff9d96; }
 
 .empty {
   color: var(--ink-3); text-align: center; font-size: 14px;
-  background: var(--card); border-radius: var(--r-card); padding: 26px 0;
+  border-radius: var(--r-md); padding: 26px 0;
+}
+/* Заглушка внутри карточки — просто строка, а не вторая стекляшка поверх. */
+.legend .empty, .chips .empty {
+  border: none; background: none; box-shadow: none;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
 }
 
-/* --------------------------------------------------- переключатели */
+/* --------------------------------------------------- сегмент-контролы */
 
-/* Крупные текстовые вкладки вместо сегмент-контрола: выбранная белая,
-   остальные приглушены почти до фона. */
-.tabs-text {
-  display: flex; gap: 16px; margin: 0 0 14px;
+/* Утопленный матовый трек, по нему ездит выпуклая линза. Ширину и сдвиг
+   линзы считает app.js по активной кнопке — так контрол работает и с
+   равными долями, и с пилюлями разной ширины. */
+.segmented {
+  position: relative;
+  display: flex; gap: 2px;
+  padding: 5px; margin: 0 0 16px;
+  border-radius: 999px;
+  background: var(--sunk);
+  box-shadow: var(--sunk-edge);
+}
+.segmented::after {
+  content: ""; position: absolute; z-index: 0;
+  top: 5px; bottom: 5px; left: 0;
+  width: var(--seg-w, 0); transform: translateX(var(--seg-x, 0));
+  border-radius: 999px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, .26), rgba(255, 255, 255, .12));
+  box-shadow:
+    inset 0 1.4px 1px -.6px rgba(255, 255, 255, .75),
+    inset 0 -1.2px 1px -.6px rgba(0, 0, 0, .3),
+    0 6px 14px -8px rgba(0, 0, 0, .6);
+}
+/* Пружина включается после первой расстановки: иначе линза приезжает
+   из левого края на глазах у зрителя. */
+.segmented[data-ready="1"]::after {
+  transition: transform var(--spring), width var(--spring);
+}
+.segmented.equal .seg-btn { flex: 1 1 0; min-width: 0; }
+.segmented.scroll {
   overflow-x: auto; scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
-.tabs-text::-webkit-scrollbar { display: none; }
-.tt {
-  flex: none; border: none; background: none; padding: 2px 0;
-  font-size: 24px; font-weight: 700; letter-spacing: -.025em;
-  color: var(--ink-4);
-  transition: color .18s ease;
-}
-.tt.active { color: var(--ink); }
+.segmented.scroll::-webkit-scrollbar { display: none; }
 
-.pills { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 14px; }
-.pills::-webkit-scrollbar { display: none; }
-.pill {
-  flex: none; height: 38px; padding: 0 16px; border-radius: 999px;
-  border: none; background: var(--card);
-  color: var(--ink-2); font-size: 13.5px; font-weight: 600;
+.seg-btn {
+  position: relative; z-index: 1; flex: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  height: 38px; padding: 0 16px; white-space: nowrap;
+  border: none; border-radius: 999px; background: none;
+  color: var(--ink-2); font-size: 14px; font-weight: 600; letter-spacing: -.02em;
 }
-.pill.active { background: var(--ink); color: #101010; }
+.seg-btn.active { color: var(--ink); }
+.seg-btn:active { transform: scale(.97); }
+
+#kind-switch { margin-bottom: 20px; }
+#kind-switch .seg-btn { height: 42px; }
 
 /* ----------------------------------------------------------- диаграмма */
 
-.chart { margin: 0; padding: 20px 16px 16px; text-align: center; }
+.chart { margin: 0; padding: 22px 16px 18px; text-align: center; }
 .donut-wrap { position: relative; width: min(260px, 68vw); margin: 0 auto; }
 #donut { display: block; width: 100%; height: auto; overflow: visible; }
 #donut .seg-arc {
   cursor: pointer;
-  transition: stroke-dasharray .55s cubic-bezier(.22, 1, .36, 1), opacity .18s ease;
+  transition: stroke-dasharray .6s cubic-bezier(.16, 1, .3, 1), opacity var(--spring-fast);
 }
 #donut.has-pick .seg-arc { opacity: .3; }
 #donut.has-pick .seg-arc.pick { opacity: 1; }
-#donut .track { stroke: var(--sunk); }
+#donut .track { stroke: rgba(255, 255, 255, .08); }
 
 /* Смена периода перерисовывает данные без перехода экрана, поэтому итог
    и легенда проявляются заново — иначе подмена чисел проходит незаметно. */
-.donut-center.fade { animation: fadeUp .34s ease both; }
+.donut-center.fade { animation: fadeUp .4s cubic-bezier(.16, 1, .3, 1) both; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } }
 
 .donut-center {
@@ -430,8 +586,8 @@ button { cursor: pointer; }
   pointer-events: none; padding: 0 18%;
 }
 .donut-center b {
-  display: block; font-size: 24px; font-weight: 700;
-  letter-spacing: -.03em; font-variant-numeric: tabular-nums;
+  display: block; font-size: 25px; font-weight: 700;
+  letter-spacing: -.035em; font-variant-numeric: tabular-nums;
 }
 .donut-center span {
   display: block; margin-top: 2px; font-size: 11px; color: var(--ink-3);
@@ -439,68 +595,88 @@ button { cursor: pointer; }
 }
 figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
 
-.legend { margin-top: 10px; padding: 6px 16px; }
+.legend { margin-top: 10px; padding: 6px 18px; }
 .legend-row {
-  animation: rowIn .34s ease both;
+  animation: rowIn .4s cubic-bezier(.16, 1, .3, 1) both;
   display: grid; grid-template-columns: 1fr auto;
-  gap: 2px 12px; padding: 12px 0; border-bottom: 1px solid var(--line);
-  cursor: pointer; transition: background .16s ease;
+  gap: 2px 12px; padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+  cursor: pointer; transition: background var(--spring-fast);
 }
 .legend-row:last-child { border-bottom: none; }
 .legend-row.pick {
-  background: var(--card-2); border-radius: 12px;
-  box-shadow: 0 0 0 8px var(--card-2); border-bottom-color: transparent;
+  background: rgba(255, 255, 255, .1); border-radius: var(--r-xs);
+  box-shadow: 0 0 0 8px rgba(255, 255, 255, .1), var(--facet-soft);
+  border-bottom-color: transparent;
 }
 @keyframes rowIn { from { opacity: 0; transform: translateY(8px); } }
-.legend-name { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; min-width: 0; }
+.legend-name {
+  display: flex; align-items: center; gap: 7px; min-width: 0;
+  font-size: 14px; font-weight: 600; letter-spacing: -.02em;
+}
 .legend-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.legend .dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
-.legend-sum { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.legend .dot { width: 10px; height: 10px; border-radius: 4px; flex: none; }
+.legend-sum {
+  font-size: 14px; font-weight: 700; letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+}
 .legend-bar {
-  grid-column: 1 / -1; height: 5px; border-radius: 999px;
-  background: var(--sunk); overflow: hidden; margin-top: 4px;
+  grid-column: 1 / -1; height: 6px; border-radius: 999px; margin-top: 5px;
+  background: rgba(0, 0, 0, .28); box-shadow: var(--sunk-edge); overflow: hidden;
 }
 .legend-bar i { display: block; height: 100%; border-radius: 999px; }
-.legend-share { grid-column: 1 / -1; font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.legend-share {
+  grid-column: 1 / -1; margin-top: 4px;
+  font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums;
+}
 
 /* ------------------------------------------------------- низ экрана */
 
-/* Панель и круглая кнопка стоят рядом одним блоком. По панели ездит вторая
-   стекляшка — она и отмечает выбранную вкладку: сдвигается на ширину ячейки
-   и на полпути слегка растягивается, иначе переход читается как рывок. */
+/* Два острова: капсула вкладок и отдельная круглая кнопка действия. Оба
+   парят с отступом от края — панель во всю ширину здесь запрещена. По
+   капсуле ездит вторая стекляшка: она отмечает выбранную вкладку, сдвигаясь
+   на ширину ячейки и слегка растягиваясь на полпути. */
 .dock {
   position: fixed; left: 50%; z-index: 9;
-  bottom: calc(var(--tabbar-gap) + var(--safe-bottom));
+  bottom: calc(var(--dock-bottom) + var(--safe-bottom));
   transform: translateX(-50%);
   display: flex; align-items: center; gap: 12px;
-  max-width: calc(100% - var(--pad) * 2);
+  /* Ширина по содержимому, но не шире экрана: без width блок считался бы от
+     точки left: 50% и схлопнулся бы вдвое. */
+  width: max-content; max-width: calc(100% - var(--pad) * 2);
 }
 
 .tabbar {
   position: relative;
-  display: grid; grid-template-columns: repeat(3, 78px);
-  height: var(--tabbar); padding: 4px;
-  border: none; border-radius: 999px;
-  background: var(--glass);
-  box-shadow: var(--glass-edge);
-  backdrop-filter: blur(8px) saturate(140%);
-  -webkit-backdrop-filter: blur(8px) saturate(140%);
+  /* На узком экране (320px) капсула ужимается сама — иначе остров действия
+     уезжает за край. Колонки равные, поэтому подвижная линза не сбивается. */
+  flex: 0 1 auto; min-width: 0;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 78px));
+  height: var(--tabbar); padding: 5px;
+  border: 1px solid var(--edge); border-radius: 999px;
+  background: var(--fill);
+  backdrop-filter: blur(40px) saturate(200%) contrast(108%);
+  -webkit-backdrop-filter: blur(40px) saturate(200%) contrast(108%);
+  box-shadow: var(--facet), var(--float-high);
 }
 
 .tabbar::after {
-  content: ""; position: absolute; left: 4px; top: 4px;
-  width: calc((100% - 8px) / 3); height: calc(var(--tabbar) - 8px);
+  content: ""; position: absolute; left: 5px; top: 5px;
+  width: calc((100% - 10px) / 3); height: calc(var(--tabbar) - 12px);
   border-radius: 999px;
-  background: var(--capsule);
-  box-shadow: var(--capsule-edge);
-  transition: translate .25s cubic-bezier(1, 0, .4, 1);
+  background: linear-gradient(160deg, rgba(255, 255, 255, .28), rgba(255, 255, 255, .12));
+  box-shadow:
+    inset 0 1.4px 1px -.6px rgba(255, 255, 255, .8),
+    inset 0 -1.2px 1px -.6px rgba(0, 0, 0, .32),
+    0 8px 18px -10px rgba(0, 0, 0, .7);
+  transition: translate var(--spring);
 }
 .tabbar[data-active="0"]::after { translate: 0 0; }
 .tabbar[data-active="1"]::after { translate: 100% 0; }
 .tabbar[data-active="2"]::after { translate: 200% 0; }
 .tabbar[data-dir="right"]::after { transform-origin: left; }
 .tabbar[data-dir="left"]::after { transform-origin: right; }
-.tabbar.bump::after { animation: capsule .44s ease; }
+.tabbar.bump::after { animation: capsule .5s cubic-bezier(.16, 1, .3, 1); }
 @keyframes capsule { 0%, 100% { scale: 1 1; } 50% { scale: 1.07 1.1; } }
 
 .tabbtn {
@@ -508,168 +684,193 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   border: none; background: none; color: var(--ink-3);
   border-radius: 999px; padding: 0;
-  font-size: 10px; font-weight: 700; line-height: 1.2; letter-spacing: -.4px;
+  font-size: 10px; font-weight: 700; line-height: 1.2; letter-spacing: -.02em;
 }
+.tabbtn:active { transform: scale(.93); }
 .tabbtn .ic-fill { display: none; }
-.tabbtn.active { color: var(--primary); }
+.tabbtn.active { color: #fff; }
 .tabbtn.active .ic-line { display: none; }
 .tabbtn.active .ic-fill { display: block; }
 
+/* Остров действия: круглая линза, подкрашенная акцентом. */
 .dock-btn {
-  width: 58px; height: var(--tabbar); flex: none;
+  width: var(--tabbar); height: var(--tabbar); flex: none;
   display: grid; place-items: center;
-  border: none; border-radius: 999px;
-  background: var(--glass); color: var(--primary);
-  box-shadow: var(--glass-edge);
-  backdrop-filter: blur(8px) saturate(140%);
-  -webkit-backdrop-filter: blur(8px) saturate(140%);
-}
-.dock-btn:active { transform: scale(.94); }
-
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .tabbar, .dock-btn { background: var(--glass-solid); }
+  border: 1px solid rgba(255, 255, 255, .2); border-radius: 50%;
+  background: linear-gradient(155deg, rgba(10, 132, 255, .82), rgba(94, 92, 230, .6));
+  color: #fff;
+  backdrop-filter: blur(40px) saturate(200%);
+  -webkit-backdrop-filter: blur(40px) saturate(200%);
+  box-shadow:
+    var(--facet),
+    0 20px 38px -16px rgba(10, 132, 255, .7),
+    0 8px 18px -10px rgba(0, 0, 0, .5);
 }
 
 /* --------------------------------------------------------------- форма */
 
-.sheet { position: fixed; inset: 0; z-index: 20; display: flex; align-items: flex-end; justify-content: center; }
-.sheet-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, .6); animation: fade .2s ease; }
+.sheet {
+  position: fixed; inset: 0; z-index: 20;
+  display: flex; align-items: flex-end; justify-content: center;
+  padding: 0 8px calc(8px + var(--safe-bottom));
+}
+.sheet-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(4, 4, 8, .5);
+  backdrop-filter: blur(6px) saturate(140%);
+  -webkit-backdrop-filter: blur(6px) saturate(140%);
+  animation: fade .24s ease;
+}
 @keyframes fade { from { opacity: 0; } }
 
 /* Закрытие проигрывается тем же движением, что и открытие, только назад:
    мгновенное исчезновение читается как сбой. */
-.sheet.closing .sheet-card { animation: slideOut .22s ease both; }
-.sheet.closing .sheet-backdrop { animation: fadeOut .22s ease both; }
-@keyframes slideOut { to { transform: translateY(100%); } }
+.sheet.closing .sheet-card { animation: slideOut .24s cubic-bezier(.4, 0, 1, 1) both; }
+.sheet.closing .sheet-backdrop { animation: fadeOut .24s ease both; }
+@keyframes slideOut { to { transform: translateY(calc(100% + 16px)); } }
 @keyframes fadeOut { to { opacity: 0; } }
 
 .sheet-card {
   position: relative; width: 100%; max-width: 560px;
   max-height: 92dvh; display: flex; flex-direction: column;
-  background: var(--bg); border: 1px solid var(--line); border-bottom: none;
-  border-radius: 26px 26px 0 0;
-  animation: slide .26s cubic-bezier(.22, 1, .36, 1);
+  border: 1px solid var(--edge); border-radius: var(--r-xl);
+  background: var(--fill-deep);
+  backdrop-filter: blur(45px) saturate(210%) contrast(110%) brightness(.8);
+  -webkit-backdrop-filter: blur(45px) saturate(210%) contrast(110%) brightness(.8);
+  box-shadow: var(--facet), var(--float-high);
+  animation: slide .42s cubic-bezier(.16, 1, .3, 1);
 }
-@keyframes slide { from { transform: translateY(100%); } }
+@keyframes slide { from { transform: translateY(calc(100% + 16px)); } }
 
-.sheet-grip { width: 38px; height: 4px; border-radius: 999px; background: var(--line); margin: 9px auto 0; }
+.sheet-grip {
+  width: 38px; height: 5px; border-radius: 999px; margin: 9px auto 0;
+  background: rgba(255, 255, 255, .22);
+}
 .sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px 6px; }
-.sheet-head h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -.02em; }
+.sheet-head h2 { margin: 0; font-size: 21px; font-weight: 700; letter-spacing: -.035em; }
 .sheet-body { overflow-y: auto; padding: 10px 18px 4px; -webkit-overflow-scrolling: touch; }
 .sheet-foot {
-  padding: 12px 18px calc(16px + var(--safe-bottom));
-  border-top: 1px solid var(--line);
+  padding: 14px 18px 18px;
+  border-top: 1px solid rgba(255, 255, 255, .1);
   display: grid; gap: 8px;
 }
-
-/* Как и в нижней панели, выбранное отмечает подвижная плашка. */
-.switch {
-  position: relative;
-  display: grid; grid-template-columns: repeat(2, 1fr);
-  padding: 5px; background: var(--card); border-radius: 999px; margin-bottom: 18px;
-}
-.switch::after {
-  content: ""; position: absolute; left: 5px; top: 5px;
-  width: calc((100% - 10px) / 2); height: calc(100% - 10px);
-  border-radius: 999px; background: var(--primary);
-  transition: translate .25s cubic-bezier(1, 0, .4, 1);
-}
-.switch[data-active="1"]::after { translate: 100% 0; }
-.sw {
-  position: relative; z-index: 1;
-  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-  padding: 11px 8px; border: none; border-radius: 999px;
-  background: none; color: var(--ink-2); font-size: 14px; font-weight: 600;
-  transition: color .2s ease;
-}
-.sw.active { color: #fff; }
 
 /* Поля покупки не пропадают рывком: строка грида уезжает в ноль, поэтому
    высота шторки меняется плавно. */
 .collapse {
   display: grid; grid-template-rows: 0fr; opacity: 0;
-  transition: grid-template-rows .28s ease, opacity .2s ease;
+  transition: grid-template-rows var(--spring), opacity var(--spring-fast);
 }
 .collapse > * { overflow: hidden; min-height: 0; }
 .collapse.open { grid-template-rows: 1fr; opacity: 1; }
 
 .field { display: block; margin-bottom: 18px; }
-.field > .eyebrow { margin-bottom: 7px; }
+.field > .eyebrow { margin-bottom: 8px; }
 .field input {
-  width: 100%; padding: 13px 14px; font-size: 16px;
-  border: none; border-radius: var(--r-md);
-  background: var(--card); color: var(--ink);
+  width: 100%; padding: 14px 16px; font-size: 16px;
+  border-radius: var(--r-sm);
+  background: var(--sunk);
+  box-shadow: var(--sunk-edge);
+  color: var(--ink);
 }
 .field input::placeholder { color: var(--ink-3); }
-.field input:focus { outline: 2px solid var(--primary); outline-offset: -1px; }
+.field input:focus {
+  outline: none;
+  border-color: rgba(10, 132, 255, .8);
+  box-shadow: var(--sunk-edge), 0 0 0 3px rgba(10, 132, 255, .35);
+}
 
 .magic { position: relative; }
-.magic input { padding-right: 52px; }
+.magic input { padding-right: 56px; }
 .magic-btn {
   position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
-  width: 38px; height: 38px; border-radius: 12px; border: none;
+  width: 40px; height: 40px; border-radius: 50%;
   display: grid; place-items: center;
-  background: var(--primary); color: #fff;
+  border: 1px solid rgba(255, 255, 255, .22);
+  background: linear-gradient(155deg, rgba(10, 132, 255, .95), rgba(94, 92, 230, .8));
+  box-shadow: var(--facet-soft), 0 8px 18px -10px rgba(10, 132, 255, .9);
+  color: #fff;
 }
+.magic-btn:active { transform: translateY(-50%) scale(.94); }
 .magic-btn:disabled { opacity: .5; }
 
 .amount-row { position: relative; }
 .amount-row input {
-  font-size: 34px; font-weight: 700; letter-spacing: -.03em;
-  padding: 12px 44px 12px 14px; font-variant-numeric: tabular-nums;
+  font-size: 34px; font-weight: 700; letter-spacing: -.04em;
+  padding: 14px 46px 14px 16px; font-variant-numeric: tabular-nums;
 }
 .amount-row .cur {
-  position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+  position: absolute; right: 18px; top: 50%; transform: translateY(-50%);
   font-size: 22px; font-weight: 600; color: var(--ink-3);
 }
 
 .cats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .cat {
-  border: 1.5px solid transparent; border-radius: var(--r-md);
-  background: var(--card); padding: 11px 6px 9px;
+  border-radius: var(--r-sm); padding: 11px 6px 9px;
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   text-align: center; color: var(--ink-2);
 }
-.cat-ic { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; }
-.cat-ic .ic { width: 19px; height: 19px; }
-.cat span { font-size: 11px; font-weight: 600; line-height: 1.2; }
-.cat.active { border-color: var(--primary); color: var(--ink); }
-
-.chips { display: flex; flex-wrap: wrap; gap: 7px; }
-.chip {
-  display: inline-flex; align-items: center; gap: 7px;
-  border: 1.5px solid transparent; border-radius: 999px;
-  padding: 6px 13px 6px 6px; background: var(--card);
-  color: var(--ink-2); font-size: 13.5px; font-weight: 600;
+.cat-ic {
+  width: 36px; height: 36px; border-radius: 12px;
+  display: grid; place-items: center; box-shadow: var(--facet-soft);
 }
-.chip .avatar { width: 24px; height: 24px; font-size: 11px; }
-.chip.active { border-color: var(--primary); color: var(--ink); }
-.chip.active .avatar { background: var(--primary); color: #fff; }
+.cat-ic .ic { width: 19px; height: 19px; }
+.cat span { font-size: 11px; font-weight: 600; line-height: 1.2; letter-spacing: -.01em; }
+.cat.active {
+  border-color: rgba(10, 132, 255, .7); color: var(--ink);
+  background: linear-gradient(146deg, rgba(10, 132, 255, .32), rgba(10, 132, 255, .14));
+  box-shadow: var(--facet-soft), 0 0 0 1px rgba(10, 132, 255, .5),
+              0 10px 22px -12px rgba(10, 132, 255, .8);
+}
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  border-radius: 999px; padding: 6px 14px 6px 6px;
+  color: var(--ink-2); font-size: 13.5px; font-weight: 600; letter-spacing: -.02em;
+}
+.chip .avatar { width: 25px; height: 25px; font-size: 11px; }
+.chip.active {
+  border-color: rgba(10, 132, 255, .7); color: var(--ink);
+  background: linear-gradient(146deg, rgba(10, 132, 255, .32), rgba(10, 132, 255, .14));
+  box-shadow: var(--facet-soft), 0 0 0 1px rgba(10, 132, 255, .5),
+              0 10px 22px -12px rgba(10, 132, 255, .8);
+}
+.chip.active .avatar {
+  background: linear-gradient(160deg, rgba(255, 255, 255, .34), rgba(255, 255, 255, .16));
+  color: #fff;
+}
 
 .status { min-height: 18px; margin: 0 0 6px; font-size: 13px; color: var(--ink-2); }
 
+/* Главная кнопка — капсула с акцентной заливкой: та же фаска, тот же
+   рассеянный свет, только тень подкрашена синим. */
 .primary-btn {
-  width: 100%; padding: 16px; border: none; border-radius: var(--r-md);
-  background: var(--primary); color: #fff;
-  font-size: 15.5px; font-weight: 700; letter-spacing: -.01em;
+  width: 100%; height: 54px; border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .22);
+  background: linear-gradient(155deg, rgba(10, 132, 255, .98), rgba(94, 92, 230, .85));
+  box-shadow: var(--facet), 0 18px 34px -16px rgba(10, 132, 255, .85);
+  color: #fff; font-size: 16px; font-weight: 700; letter-spacing: -.02em;
 }
 .primary-btn:disabled { opacity: .55; }
-.primary-btn:active { transform: scale(.99); }
+.primary-btn:active { transform: scale(.98); }
 .ghost-btn {
-  width: 100%; padding: 13px; border-radius: var(--r-md);
-  border: none; background: var(--card); color: var(--ink-2);
-  font-size: 14px; font-weight: 600;
+  width: 100%; height: 46px; border-radius: 999px;
+  color: var(--ink-2); font-size: 14px; font-weight: 600; letter-spacing: -.02em;
 }
 
 .toast {
   position: fixed; left: 50%; transform: translateX(-50%);
-  bottom: calc(var(--tabbar) + var(--tabbar-gap) * 2 + 26px + var(--safe-bottom));
+  bottom: calc(var(--tabbar) + var(--dock-bottom) + 16px + var(--safe-bottom));
   z-index: 30; max-width: min(420px, calc(100% - 32px));
-  background: var(--sunk); color: var(--ink);
-  padding: 12px 18px; border-radius: 999px;
-  font-size: 13.5px; font-weight: 600;
-  box-shadow: var(--shadow);
-  animation: rise .2s ease both;
+  border: 1px solid var(--edge); border-radius: 999px;
+  background: var(--fill-deep);
+  backdrop-filter: blur(30px) saturate(200%);
+  -webkit-backdrop-filter: blur(30px) saturate(200%);
+  box-shadow: var(--facet), var(--float);
+  color: var(--ink); padding: 13px 20px;
+  font-size: 13.5px; font-weight: 600; letter-spacing: -.02em;
+  animation: rise .32s cubic-bezier(.16, 1, .3, 1) both;
 }
 
 /* ---------------------------------------------------------- широкий экран */
@@ -677,7 +878,7 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
 /* Компоненты те же, меняется только раскладка: контент расходится во всю
    ширину, сетки набирают столбцы, панель сжимается по содержимому. */
 @media (min-width: 768px) {
-  :root { --pad: 20px; }
+  :root { --pad: 24px; }
 
   .auth { max-width: 560px; margin: 0 auto; }
 
@@ -696,10 +897,11 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
   }
   .legend { margin-top: 0; }
 
-  .fund-value { font-size: 46px; }
-  .panel-title { font-size: 30px; }
+  .segmented { width: fit-content; max-width: 100%; }
 
-  .tabbar { grid-template-columns: repeat(3, 96px); }
+  .fund-value { font-size: 46px; }
+
+  .tabbar { grid-template-columns: repeat(3, minmax(0, 96px)); }
 }
 
 @media (min-width: 1200px) {
