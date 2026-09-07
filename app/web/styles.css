@@ -30,10 +30,34 @@
    в тексте и органах управления их нет.
    ------------------------------------------------------------------------- */
 
+/* -------------------------------------------------------------------------
+   Шрифт. SF Pro Display из официального пакета Apple (developer.apple.com/fonts),
+   урезанный до латиницы с кириллицей и собранный в woff2 — scripts/build_fonts.py.
+   Своя копия нужна ради Android и десктопа: там системного SF нет, и раньше
+   интерфейс подменялся на Roboto с Segoe UI, отчего вся выверенная по Apple
+   метрика — межбуквенные просветы, высота строчных, вес цифр — плыла.
+   ------------------------------------------------------------------------- */
+
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/sf-pro-display-400.woff2") format("woff2");
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/sf-pro-display-600.woff2") format("woff2");
+  font-weight: 600; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/sf-pro-display-700.woff2") format("woff2");
+  font-weight: 700; font-style: normal; font-display: swap;
+}
+
 :root {
   color-scheme: dark;
 
-  --ui: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+  --ui: "SF Pro Display", -apple-system, BlinkMacSystemFont, "SF Pro Text",
         "Inter", "Helvetica Neue", "Segoe UI", Roboto, system-ui, sans-serif;
 
   --bg: #0c0c0f;

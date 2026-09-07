@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import mimetypes
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -140,6 +141,9 @@ def create_app() -> FastAPI:
                 versioned_index(), headers={"Cache-Control": "no-cache"}
             )
 
+        # Python сам по себе про woff2 не знает и отдал бы шрифты как
+        # text/plain; Safari такой ответ игнорирует и рисует запасным шрифтом.
+        mimetypes.add_type("font/woff2", ".woff2")
         app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")
 
     return app
