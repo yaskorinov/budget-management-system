@@ -343,6 +343,7 @@ function applyMode(mode) {
   second.dataset.kind = split ? 'transfer' : 'contribution';
   second.querySelector('span').textContent = split ? 'Возврат' : 'Взнос';
 
+  $('app').classList.toggle('split', split);
   $('fund-badge').hidden = split;
   $('fund-meter').hidden = split;
   $('fund-in-label').textContent = split ? 'Вы оплатили' : 'Внесено';

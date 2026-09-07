@@ -482,11 +482,16 @@ button:active { transform: scale(.96); }
 
 .fund-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .fund .eyebrow { color: rgba(255, 255, 255, .72); }
+/* Кружок вынут из потока и прижат к углу. В строке он держал высоту в 76px
+   ради подписи в 14px — под ней оставалась пустая полоса во всю карточку.
+   Теперь сумма встаёт сразу под подписью, а кружок стоит рядом с ней. */
 .fund-badge {
-  position: relative; z-index: 1;
+  /* Отсчёт идёт от строки заголовка — она уже позиционирована, — поэтому
+     минус два пикселя ставят кружок ровно в угол карточки. */
+  position: absolute; z-index: 1; top: -2px; right: -2px;
   width: 76px; height: 76px; border-radius: 50%;
   display: grid; place-items: center; align-content: center;
-  text-align: center; margin: -2px -2px 0 0;
+  text-align: center;
   background: rgba(0, 0, 0, .18);
   box-shadow: var(--tile-edge);
 }
@@ -496,14 +501,16 @@ button:active { transform: scale(.96); }
   text-transform: uppercase; padding: 0 6px; color: rgba(255, 255, 255, .82);
 }
 .fund-value {
-  position: relative; z-index: 1; margin-top: 8px;
+  /* Справа держим место под кружок, чтобы длинная сумма под него не заезжала;
+     в дележе кружка нет — там место не нужно. */
+  position: relative; z-index: 1; margin-top: 10px; padding-right: 88px;
   font-size: clamp(36px, 11vw, 48px); font-weight: 700;
   letter-spacing: -.04em; line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 .meter {
   position: relative; z-index: 1;
-  height: 8px; border-radius: 999px; margin: 18px 0 14px;
+  height: 8px; border-radius: 999px; margin: 16px 0 13px;
   background: rgba(0, 0, 0, .28); box-shadow: var(--sunk-edge); overflow: hidden;
 }
 .meter i {
@@ -512,6 +519,8 @@ button:active { transform: scale(.96); }
   box-shadow: 0 0 12px rgba(255, 255, 255, .45);
   transition: width var(--spring);
 }
+#app.split .fund-value { padding-right: 0; }
+
 .fund-foot { position: relative; z-index: 1; display: flex; gap: 24px; }
 /* В дележе полосы расхода нет — отступ под числом задаём сами. */
 .meter[hidden] + .fund-foot { margin-top: 18px; }
