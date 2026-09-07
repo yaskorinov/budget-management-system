@@ -25,6 +25,8 @@
 
   <!-- действия -->
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5.5v13M5.5 12h13"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2.8" width="6" height="11.4" rx="3"/><path d="M5.4 11.4a6.6 6.6 0 0 0 13.2 0M12 18v3.2"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="7.4" y="7.4" width="9.2" height="9.2" rx="2.6" class="ic-fill"/></symbol>
   <symbol id="i-close" viewBox="0 0 24 24"><path d="M6.5 6.5 17.5 17.5M17.5 6.5 6.5 17.5"/></symbol>
   <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4.5 12h14M13 6.5 18.5 12 13 17.5"/></symbol>
   <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20.2 4.6v4.2h-4.2"/></symbol>
@@ -316,7 +318,14 @@
 
     <div class="sheet-foot">
       <button type="button" id="cancel-edit" class="ghost-btn" hidden>Отменить</button>
-      <button type="submit" id="submit" class="primary-btn">Записать покупку</button>
+      <div class="submit-row">
+        <button type="submit" id="submit" class="primary-btn">Записать покупку</button>
+        <!-- Микрофон прячем там, где его не может быть: без getUserMedia
+             (старый вебвью, http) кнопка бы просто не отвечала на нажатие. -->
+        <button type="button" id="mic-btn" class="mic-btn" aria-label="Записать голосом" hidden>
+          <svg class="ic ic-22"><use id="mic-icon" href="#i-mic"/></svg>
+        </button>
+      </div>
     </div>
   </form>
 </div>

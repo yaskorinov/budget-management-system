@@ -427,6 +427,7 @@ PATCH  /api/operations/{id}                 сумма, категория, на
 DELETE /api/operations/{id}                 мягкое удаление
 GET    /api/groups/{id}/stats               ?mode=categories|people&period=month
 POST   /api/categorize                      разобрать текст покупки через LLM
+POST   /api/voice                           запись покупки голосом: тело — сам звук
 GET    /charts/{name}.png                   отрисованная диаграмма
 ```
 

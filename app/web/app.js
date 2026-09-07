@@ -723,6 +723,10 @@ function updateKindFields() {
     $('payee-field').classList.toggle('open', transfer);
   });
 
+  // Голосом записываем покупку: у взноса и возврата из полей одна сумма,
+  // диктовать там нечего.
+  $('mic-btn').hidden = !micReady || !purchase;
+
   $('submit').textContent = state.editing
     ? 'Сохранить изменения'
     : purchase ? 'Записать покупку'
@@ -757,6 +761,7 @@ function closeSheet() {
 
   // Прячем не сразу: сначала шторка должна уехать вниз. Ждём по таймеру,
   // а не по animationend — при «уменьшить движение» анимации нет вовсе.
+  stopVoice({ cancel: true });
   sheet.classList.add('closing');
   setTimeout(() => {
     sheet.classList.remove('closing');
@@ -873,10 +878,7 @@ async function parseWithLLM() {
       method: 'POST',
       body: JSON.stringify({ text }),
     });
-    if (parsed.amount) $('amount').value = (parsed.amount / 100).toString().replace('.', ',');
-    $('title').value = parsed.title;
-    state.category = parsed.category;
-    renderCategories();
+    applyParsed(parsed);
     $('add-status').textContent =
       `${parsed.category_title} — ${parsed.source === 'llm' ? 'определил ИИ' : 'по ключевым словам'}`;
   } catch (error) {
@@ -884,6 +886,173 @@ async function parseWithLLM() {
   } finally {
     $('parse-btn').disabled = false;
   }
+}
+
+
+// Разбор приходит одинаковый и с текста, и с голоса — раскладываем его по
+// полям в одном месте.
+function applyParsed(parsed) {
+  if (parsed.amount) $('amount').value = (parsed.amount / 100).toString().replace('.', ',');
+  $('title').value = parsed.title;
+  state.category = parsed.category;
+  renderCategories();
+}
+
+// --------------------------------------------------------------------------- //
+//  Голосом
+// --------------------------------------------------------------------------- //
+
+// Пишем через MediaRecorder — он сам берёт формат, который умеет устройство, —
+// а перед отправкой переводим запись в wav 16 кГц моно. Браузеры отдают разное
+// (Chrome — webm, Safari — mp4), и распознавание принимает такое не всегда;
+// wav понимают одинаково все, а речи 16 килогерц хватает с запасом.
+const VOICE_RATE = 16000;
+const VOICE_LIMIT_MS = 60000;   // минуты хватит на любую покупку
+
+const voice = { recorder: null, stream: null, chunks: [], timer: null, cancelled: false };
+
+// Без getUserMedia (старый вебвью, страница не по https) кнопка молчала бы
+// в ответ на нажатие — лучше не показывать её вовсе.
+const micReady = !!(navigator.mediaDevices
+  && navigator.mediaDevices.getUserMedia
+  && window.MediaRecorder
+  && (window.AudioContext || window.webkitAudioContext));
+
+function micState(recording) {
+  $('mic-btn').classList.toggle('rec', recording);
+  $('mic-btn').setAttribute('aria-label', recording ? 'Остановить запись' : 'Записать голосом');
+  $('mic-icon').setAttribute('href', recording ? '#i-stop' : '#i-mic');
+}
+
+async function toggleVoice() {
+  if (voice.recorder) return stopVoice();
+
+  try {
+    voice.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (error) {
+    toast(error && error.name === 'NotAllowedError'
+      ? 'Разрешите доступ к микрофону'
+      : 'Микрофон недоступен');
+    return;
+  }
+
+  voice.chunks = [];
+  voice.cancelled = false;
+  voice.recorder = new MediaRecorder(voice.stream);
+  voice.recorder.ondataavailable = (event) => {
+    if (event.data && event.data.size) voice.chunks.push(event.data);
+  };
+  voice.recorder.onstop = finishVoice;
+  voice.recorder.start();
+  // Забытая запись не должна идти вечно: остановим сами.
+  voice.timer = setTimeout(() => stopVoice(), VOICE_LIMIT_MS);
+
+  micState(true);
+  $('add-status').textContent = 'Слушаю — нажмите ещё раз, когда закончите';
+  haptic();
+}
+
+function stopVoice({ cancel = false } = {}) {
+  if (!voice.recorder) return;
+  voice.cancelled = cancel;
+  clearTimeout(voice.timer);
+  try {
+    voice.recorder.stop();
+  } catch (_) { /* уже остановлен */ }
+}
+
+async function finishVoice() {
+  const chunks = voice.chunks;
+  const type = voice.recorder.mimeType;
+  if (voice.stream) voice.stream.getTracks().forEach((track) => track.stop());
+  voice.recorder = null;
+  voice.stream = null;
+  micState(false);
+
+  // Шторку закрыли посреди записи — расшифровывать уже нечего.
+  if (voice.cancelled || !chunks.length) return;
+
+  $('mic-btn').disabled = true;
+  $('add-status').textContent = 'Расшифровываю…';
+  try {
+    const heard = await api('/voice', {
+      method: 'POST',
+      body: await toWav(new Blob(chunks, { type })),
+      headers: { 'Content-Type': 'audio/wav' },
+    });
+    applyParsed(heard);
+    // Расшифровку показываем всегда: модель может ослышаться, и человек
+    // должен видеть, что записано, — так же делает бот.
+    $('raw-text').value = heard.text;
+    $('add-status').textContent = `Услышал: ${heard.text}`;
+    haptic();
+  } catch (error) {
+    $('add-status').textContent = error.message;
+  } finally {
+    $('mic-btn').disabled = false;
+  }
+}
+
+async function toWav(blob) {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  const context = new Ctx();
+  const decoded = await context.decodeAudioData(await blob.arrayBuffer());
+  context.close();
+
+  // Сводим в моно: у речи каналы почти одинаковые, второй только утяжеляет.
+  const channels = [];
+  for (let i = 0; i < decoded.numberOfChannels; i += 1) channels.push(decoded.getChannelData(i));
+  const mono = new Float32Array(decoded.length);
+  for (let i = 0; i < decoded.length; i += 1) {
+    let sum = 0;
+    for (const channel of channels) sum += channel[i];
+    mono[i] = sum / channels.length;
+  }
+
+  return wavBlob(resample(mono, decoded.sampleRate, VOICE_RATE), VOICE_RATE);
+}
+
+// Линейная интерполяция: для речи её достаточно, а фильтр по всем правилам
+// стоил бы заметной паузы на телефоне.
+function resample(input, from, to) {
+  if (from === to) return input;
+  const length = Math.max(1, Math.round((input.length * to) / from));
+  const output = new Float32Array(length);
+  const step = (input.length - 1) / Math.max(1, length - 1);
+  for (let i = 0; i < length; i += 1) {
+    const position = i * step;
+    const left = Math.floor(position);
+    const right = Math.min(left + 1, input.length - 1);
+    output[i] = input[left] + (input[right] - input[left]) * (position - left);
+  }
+  return output;
+}
+
+function wavBlob(samples, rate) {
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+  const label = (offset, value) => {
+    for (let i = 0; i < value.length; i += 1) view.setUint8(offset + i, value.charCodeAt(i));
+  };
+
+  label(0, 'RIFF');
+  view.setUint32(4, 36 + samples.length * 2, true);
+  label(8, 'WAVEfmt ');
+  view.setUint32(16, 16, true);        // длина описания формата
+  view.setUint16(20, 1, true);         // PCM, без сжатия
+  view.setUint16(22, 1, true);         // один канал
+  view.setUint32(24, rate, true);
+  view.setUint32(28, rate * 2, true);  // байт в секунду
+  view.setUint16(32, 2, true);         // байт на кадр
+  view.setUint16(34, 16, true);        // бит на отсчёт
+  label(36, 'data');
+  view.setUint32(40, samples.length * 2, true);
+
+  for (let i = 0; i < samples.length; i += 1) {
+    const value = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(44 + i * 2, value < 0 ? value * 0x8000 : value * 0x7fff, true);
+  }
+  return new Blob([buffer], { type: 'audio/wav' });
 }
 
 // --------------------------------------------------------------------------- //
@@ -1091,6 +1260,7 @@ $('fab').onclick = newOperation;
 $('op-form').onsubmit = submitForm;
 $('cancel-edit').onclick = resetForm;
 $('parse-btn').onclick = parseWithLLM;
+$('mic-btn').onclick = toggleVoice;
 $('reload').onclick = () => refresh().then(() => toast('Обновлено')).catch(() => {});
 
 $('raw-text').addEventListener('keydown', (event) => {

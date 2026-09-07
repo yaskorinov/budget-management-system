@@ -174,6 +174,12 @@ with TestClient(app) as client:
     link = client.post("/api/link/telegram", headers=hg).json()
     assert link["code"], link
 
+    # Запись голосом: без ключа модели эндпоинт честно говорит, что выключен,
+    # а пустое тело не должно уходить в распознавание.
+    assert client.post("/api/voice", content=b"", headers=h).status_code == 503
+    assert client.post("/api/voice", content=b"RIFF").status_code == 401, \
+        "без входа микрофон недоступен"
+
     # Вход через Яндекс в тестах не настроен — и наружу это видно честно.
     assert client.get("/api/auth/yandex/url").status_code == 503
     assert client.post("/api/link/yandex", headers=hg).status_code == 503

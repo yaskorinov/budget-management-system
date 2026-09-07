@@ -12,6 +12,7 @@ from app.api.auth import current_user, issue_session, read_session, verify_init_
 from app.config import settings
 from app.core import categories as cat
 from app.core import insights, periods, reports, service
+from app.core import voice as stt
 from app.core.classifier import parse_purchase
 from app.db.base import get_session
 from app.db.models import LINK, Group, Operation, User
@@ -389,6 +390,61 @@ async def group_stats(
             for item in report.slices
         ],
         chart_url=chart_url,
+    )
+
+
+# Столько же, сколько бот берёт у голосового: пары минут речи хватает,
+# а больше — уже не операция, а разговор.
+MAX_VOICE_BYTES = 5 * 1024 * 1024
+
+
+@router.post("/voice", response_model=schemas.VoiceOut)
+async def voice(request: Request, user: User = Depends(current_user)):
+    """Запись из браузера: расшифровываем и разбираем тем же путём, что текст.
+
+    Тело запроса — сам звук, без multipart: так не нужен лишний пакет, а
+    браузеру всё равно, что отправлять — Blob уходит как есть.
+    """
+    if not settings.llm_enabled or not settings.llm_voice_model:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "Голосовой ввод не настроен"
+        )
+
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > MAX_VOICE_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "Запись слишком длинная"
+        )
+
+    audio = await request.body()
+    if not audio:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Пустая запись")
+    if len(audio) > MAX_VOICE_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "Запись слишком длинная"
+        )
+
+    try:
+        text = await stt.transcribe(audio, stt.audio_format(request.headers.get("content-type")))
+    except stt.VoiceUnavailable:
+        # Причина уже в логе: ключ, лимит, сеть. Человеку нужен выход, а не код
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Распознавание сейчас недоступно — запишите операцию текстом",
+        ) from None
+    if not text:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "Не разобрал запись — попробуйте ещё раз"
+        )
+
+    parsed = await parse_purchase(text)
+    return schemas.VoiceOut(
+        text=text,
+        amount=parsed.amount,
+        category=parsed.category,
+        category_title=cat.get(parsed.category).title,
+        title=parsed.title,
+        source=parsed.source,
     )
 
 

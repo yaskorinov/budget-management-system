@@ -176,6 +176,17 @@ class CategorizeOut(BaseModel):
     source: str
 
 
+class VoiceOut(BaseModel):
+    """Расшифровку возвращаем вместе с разбором: модель может ослышаться,
+    и человек должен видеть, что записано, — как в боте."""
+    text: str
+    amount: int | None
+    category: str
+    category_title: str
+    title: str
+    source: str
+
+
 class CategoryOut(BaseModel):
     code: str
     title: str

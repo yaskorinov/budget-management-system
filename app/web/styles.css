@@ -201,7 +201,7 @@ button { cursor: pointer; }
 
 /* Мелочь лежит на уже размытом родителе — ей хватает прозрачной подложки. */
 .group-pill, .icon-btn, .mini-btn, .op-sum, .cat, .chip, .avatar,
-.ghost-btn, .field input, .fund-badge, .pill-btn, .invite-out input {
+.ghost-btn, .field input, .fund-badge, .pill-btn, .invite-out input, .mic-btn {
   border: none;
   background: var(--capsule);
   box-shadow: var(--capsule-edge);
@@ -1046,6 +1046,31 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
 }
 .primary-btn:disabled { opacity: .55; }
 .primary-btn:active { transform: scale(.98); }
+
+/* Кнопка записи стоит рядом с основной и повторяет её высоту: это не
+   второстепенное действие, а второй способ сделать то же самое. Материал
+   при этом обычный, стеклянный — цвет остаётся у главной кнопки. */
+.submit-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.mic-btn {
+  width: 54px; height: 54px; border-radius: 50%;
+  display: grid; place-items: center;
+  color: var(--ink); transition: color var(--spring), background var(--spring);
+}
+.mic-btn:active { transform: scale(.94); }
+.mic-btn:disabled { opacity: .5; }
+/* Идёт запись: красный, как индикатор эфира, и мягкая волна вокруг —
+   она заметна краем глаза и сообщает, что микрофон включён. */
+.mic-btn.rec {
+  color: #ff453a;
+  background: rgba(255, 69, 58, .18);
+  animation: micWave 1.8s ease-out infinite;
+}
+@keyframes micWave {
+  0%   { box-shadow: var(--capsule-edge), 0 0 0 0 rgba(255, 69, 58, .45); }
+  70%  { box-shadow: var(--capsule-edge), 0 0 0 12px rgba(255, 69, 58, 0); }
+  100% { box-shadow: var(--capsule-edge), 0 0 0 0 rgba(255, 69, 58, 0); }
+}
+@media (prefers-reduced-motion: reduce) { .mic-btn.rec { animation: none; } }
 .ghost-btn {
   width: 100%; height: 46px; border-radius: 999px;
   color: var(--ink-2); font-size: 14px; font-weight: 600; letter-spacing: -.02em;
