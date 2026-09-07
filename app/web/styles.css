@@ -569,7 +569,7 @@ button:active { transform: scale(.96); }
   display: grid; place-items: center;
   background: rgba(33, 160, 56, .22);
   box-shadow: var(--tile-edge);
-  color: #8fc4ff;
+  color: var(--ink);
 }
 .insight-head .mini-btn { width: 28px; height: 28px; }
 .insight-head .mini-btn .ic { width: 15px; height: 15px; }
