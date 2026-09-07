@@ -148,7 +148,9 @@ def create_app() -> FastAPI:
         # поэтому имена файлов сами по себе не годятся: после деплоя человек
         # ещё сутки видит старую версию. Отдаём страницу с версией в адресах
         # скриптов — меняется файл, меняется адрес, кеш обходится сам.
-        @app.get("/", include_in_schema=False)
+        # HEAD тоже указываем явно: иначе такой запрос провалится в статику
+        # и отдаст ту же страницу, но без версий и с собственным ETag.
+        @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
         async def index() -> HTMLResponse:
             return HTMLResponse(
                 versioned_index(), headers={"Cache-Control": "no-cache"}
