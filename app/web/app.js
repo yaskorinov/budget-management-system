@@ -713,6 +713,15 @@ function resizeSheet(mutate) {
   );
 }
 
+// Надпись на главной кнопке зависит от вида операции и от того, правим мы
+// операцию или заводим новую. Считаем её в одном месте: кнопку приходится
+// подписывать и при переключении вида, и после расшифровки.
+function submitLabel() {
+  if (state.editing) return 'Сохранить изменения';
+  if (state.kind === 'purchase') return 'Записать покупку';
+  return state.kind === 'transfer' ? 'Записать возврат' : 'Внести в фонд';
+}
+
 function updateKindFields() {
   const purchase = state.kind === 'purchase';
   const transfer = state.kind === 'transfer';
@@ -727,10 +736,7 @@ function updateKindFields() {
   // диктовать там нечего.
   $('mic-btn').hidden = !micReady || !purchase;
 
-  $('submit').textContent = state.editing
-    ? 'Сохранить изменения'
-    : purchase ? 'Записать покупку'
-      : transfer ? 'Записать возврат' : 'Внести в фонд';
+  $('submit').textContent = submitLabel();
   document.querySelectorAll('#kind-switch .seg-btn').forEach((button) =>
     button.classList.toggle('active', button.dataset.kind === state.kind));
   positionThumb($('kind-switch'));
@@ -972,7 +978,11 @@ async function finishVoice() {
   // Шторку закрыли посреди записи — расшифровывать уже нечего.
   if (voice.cancelled || !chunks.length) return;
 
+  // Пока идёт расшифровка, записывать нечего: кнопка гаснет и говорит,
+  // чем занята, — иначе непонятно, ждать или жать.
   $('mic-btn').disabled = true;
+  $('submit').disabled = true;
+  $('submit').textContent = 'Обработка…';
   $('add-status').textContent = 'Расшифровываю…';
   try {
     const heard = await api('/voice', {
@@ -990,6 +1000,8 @@ async function finishVoice() {
     $('add-status').textContent = error.message;
   } finally {
     $('mic-btn').disabled = false;
+    $('submit').disabled = false;
+    $('submit').textContent = submitLabel();
   }
 }
 
