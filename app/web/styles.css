@@ -67,11 +67,12 @@
   --ink-2: rgba(235, 235, 245, .74);
   --ink-3: rgba(235, 235, 245, .52);
 
-  /* Акцент один — синий iOS в тёмном варианте (#0A84FF): на чёрном он
-     читается лучше дневного #007AFF. Зелёный и красный статусов (#30D158,
-     #FF453A) живут в подкрашенных заливках, где нужна прозрачность, поэтому
-     заданы там rgba, а не токеном. */
-  --blue: #0a84ff;
+  /* Акцент один — зелёный Сбера (#21A038). Он глубокий и приглушённый, а
+     зелёный статусов яркий и мятный (#30D158): рядом они не путаются —
+     акцент зовёт нажать, статус сообщает о деньгах. Красный статуса
+     (#FF453A) и этот мятный живут в подкрашенных заливках, где нужна
+     прозрачность, поэтому заданы там rgba, а не токеном. */
+  --accent: #21a038;
 
   /* Радиусы: внешние карточки, вложенные плитки, мелочь. */
   --r-xl: 36px;
@@ -268,7 +269,7 @@ button:active { transform: scale(.96); }
   overflow: hidden;
   border-radius: var(--r-xl); padding: 30px 26px 34px;
   background:
-    linear-gradient(146deg, rgba(10, 132, 255, .56) 0%, rgba(10, 110, 226, .36) 62%,
+    linear-gradient(146deg, rgba(33, 160, 56, .56) 0%, rgba(20, 124, 46, .38) 62%,
                     rgba(255, 255, 255, .06) 100%);
 }
 /* Блик на верхней грани: свет скользит по стеклу, а не заливает карточку. */
@@ -402,19 +403,19 @@ button:active { transform: scale(.96); }
 .section-head { display: flex; align-items: baseline; justify-content: space-between; }
 .link-btn {
   display: inline-flex; align-items: center; gap: 5px;
-  border: none; background: none; color: var(--blue);
+  border: none; background: none; color: var(--accent);
   font-size: 13.5px; font-weight: 600; padding: 0;
 }
 
 /* ---------------------------------------------------------- баннер фонда */
 
 /* Единственная цветная линза в интерфейсе: тот же материал, но подкрашенный
-   акцентом — синий уходит в фиолетовый, как градиентный тинт iOS. */
+   акцентом — зелёный уходит в мяту и травяной, оставаясь одной краской. */
 .fund {
   overflow: hidden;
   border-radius: var(--r-xl); padding: 22px 22px 20px;
   background:
-    linear-gradient(146deg, rgba(10, 132, 255, .5) 0%, rgba(10, 110, 226, .3) 56%,
+    linear-gradient(146deg, rgba(33, 160, 56, .5) 0%, rgba(20, 124, 46, .32) 56%,
                     rgba(255, 255, 255, .05) 100%);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
@@ -436,21 +437,21 @@ button:active { transform: scale(.96); }
   width: 200%;
   background: linear-gradient(
     115deg,
-    rgba(36, 122, 235, .3) 0%,
-    rgba(86, 186, 250, .3) 8%,
-    rgba(64, 150, 245, .3) 17%,
-    rgba(116, 122, 250, .3) 25%,
-    rgba(70, 178, 240, .3) 33%,
-    rgba(48, 140, 240, .3) 42%,
-    rgba(36, 122, 235, .3) 50%,
-    rgba(86, 186, 250, .3) 58%,
-    rgba(64, 150, 245, .3) 67%,
-    rgba(116, 122, 250, .3) 75%,
-    rgba(70, 178, 240, .3) 83%,
-    rgba(48, 140, 240, .3) 92%,
-    rgba(36, 122, 235, .3) 100%
+    rgba(33, 160, 56, .3) 0%,
+    rgba(92, 208, 120, .3) 8%,
+    rgba(56, 184, 96, .3) 17%,
+    rgba(120, 206, 88, .3) 25%,
+    rgba(48, 194, 140, .3) 33%,
+    rgba(40, 170, 72, .3) 42%,
+    rgba(33, 160, 56, .3) 50%,
+    rgba(92, 208, 120, .3) 58%,
+    rgba(56, 184, 96, .3) 67%,
+    rgba(120, 206, 88, .3) 75%,
+    rgba(48, 194, 140, .3) 83%,
+    rgba(40, 170, 72, .3) 92%,
+    rgba(33, 160, 56, .3) 100%
   );
-  /* Складываем со светом, а не закрашиваем: синий под лентой остаётся синим. */
+  /* Складываем со светом, а не закрашиваем: зелёный под лентой остаётся зелёным. */
   mix-blend-mode: screen;
   animation: fundFlow 20s linear infinite;
   will-change: transform;
@@ -566,7 +567,7 @@ button:active { transform: scale(.96); }
 .insight-icon {
   width: 26px; height: 26px; border-radius: 50%; flex: none;
   display: grid; place-items: center;
-  background: rgba(10, 132, 255, .22);
+  background: rgba(33, 160, 56, .22);
   box-shadow: var(--tile-edge);
   color: #8fc4ff;
 }
@@ -633,8 +634,8 @@ button:active { transform: scale(.96); }
 .debt-pay {
   flex: none; height: 32px; padding: 0 15px;
   border: none; border-radius: 999px;
-  background: linear-gradient(180deg, rgba(10, 132, 255, .95), rgba(10, 132, 255, .78));
-  box-shadow: var(--tile-edge), 0 6px 16px -8px rgba(10, 132, 255, .9);
+  background: linear-gradient(180deg, rgba(33, 160, 56, .95), rgba(33, 160, 56, .78));
+  box-shadow: var(--tile-edge), 0 6px 16px -8px rgba(33, 160, 56, .9);
   color: #fff; font-size: 13px; font-weight: 700; letter-spacing: -.01em;
 }
 
@@ -890,7 +891,7 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
   display: grid; place-items: center;
   border: none; border-radius: 50%;
   background: var(--glass);
-  color: var(--blue);
+  color: var(--accent);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
   box-shadow: var(--glass-edge);
@@ -969,7 +970,7 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
 .field input::placeholder { color: var(--ink-3); }
 .field input:focus {
   outline: none;
-  box-shadow: var(--sunk-edge), 0 0 0 3px rgba(10, 132, 255, .4);
+  box-shadow: var(--sunk-edge), 0 0 0 3px rgba(33, 160, 56, .4);
 }
 
 .magic { position: relative; }
@@ -979,8 +980,8 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
   width: 40px; height: 40px; border-radius: 50%;
   display: grid; place-items: center;
   border: none;
-  background: linear-gradient(155deg, rgba(10, 132, 255, .98), rgba(8, 100, 210, .82));
-  box-shadow: var(--tile-edge), 0 8px 18px -10px rgba(10, 132, 255, .9);
+  background: linear-gradient(155deg, rgba(33, 160, 56, .98), rgba(18, 116, 42, .82));
+  box-shadow: var(--tile-edge), 0 8px 18px -10px rgba(33, 160, 56, .9);
   color: #fff;
 }
 .magic-btn:active { transform: translateY(-50%) scale(.94); }
@@ -1011,9 +1012,9 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
 .cat span { font-size: 11px; font-weight: 600; line-height: 1.2; letter-spacing: -.01em; }
 .cat.active {
   color: var(--ink);
-  background: rgba(10, 132, 255, .26);
-  box-shadow: var(--tile-edge), 0 0 0 1px rgba(10, 132, 255, .55),
-              0 8px 20px -12px rgba(10, 132, 255, .8);
+  background: rgba(33, 160, 56, .26);
+  box-shadow: var(--tile-edge), 0 0 0 1px rgba(33, 160, 56, .55),
+              0 8px 20px -12px rgba(33, 160, 56, .8);
 }
 
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -1026,11 +1027,11 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
 .chip .avatar { width: 25px; height: 25px; font-size: 11px; }
 .chip.active {
   color: var(--ink);
-  background: rgba(10, 132, 255, .26);
-  box-shadow: var(--tile-edge), 0 0 0 1px rgba(10, 132, 255, .55),
-              0 8px 20px -12px rgba(10, 132, 255, .8);
+  background: rgba(33, 160, 56, .26);
+  box-shadow: var(--tile-edge), 0 0 0 1px rgba(33, 160, 56, .55),
+              0 8px 20px -12px rgba(33, 160, 56, .8);
 }
-.chip.active .avatar { background: rgba(10, 132, 255, .55); color: #fff; }
+.chip.active .avatar { background: rgba(33, 160, 56, .55); color: #fff; }
 
 .status { min-height: 18px; margin: 0 0 6px; font-size: 13px; color: var(--ink-2); }
 
@@ -1039,8 +1040,8 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
 .primary-btn {
   width: 100%; height: 54px; border-radius: 999px;
   border: none;
-  background: linear-gradient(155deg, rgba(10, 132, 255, 1), rgba(8, 104, 216, .88));
-  box-shadow: var(--capsule-edge), 0 14px 30px -16px rgba(10, 132, 255, .85);
+  background: linear-gradient(155deg, rgba(33, 160, 56, 1), rgba(19, 120, 44, .88));
+  box-shadow: var(--capsule-edge), 0 14px 30px -16px rgba(33, 160, 56, .85);
   color: #fff; font-size: 16px; font-weight: 700; letter-spacing: -.02em;
 }
 .primary-btn:disabled { opacity: .55; }

@@ -558,7 +558,7 @@ function operationRow(operation, { compact = false } = {}) {
   const row = el('div', `op${contribution ? ' in' : ''}${compact ? ' compact' : ''}`);
 
   const badge = el('div', 'op-icon');
-  const color = transfer ? '#0a84ff'
+  const color = transfer ? '#21a038'
     : contribution ? '#30d158'
       : category ? category.color : '#8e8d88';
   badge.style.background = tint(color, 0.18);
