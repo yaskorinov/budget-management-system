@@ -16,14 +16,15 @@ from app.core import categories as cat
 from app.core import periods, service
 from app.core.classifier import chat
 from app.core.money import format_money
+from app.db.base import utcnow
 from app.db.models import Group
 
 log = logging.getLogger(__name__)
 
-# Совет за день считаем один раз на бюджет: модель отвечает не мгновенно и не
-# бесплатно, а вечерняя рассылка и веб должны показывать один и тот же текст.
-# Кэш в памяти процесса: перезапуск просто заставит пересчитать.
-_TIP_CACHE: dict[tuple[int, dt.date], str | None] = {}
+# Как часто совет обновляется сам. Чаще незачем: расходы за несколько часов
+# меняются мало, а текст, который скачет при каждом заходе, читать перестают.
+# Обновить раньше можно кнопкой в приложении.
+TIP_TTL = dt.timedelta(hours=6)
 
 TIP_SYSTEM = (
     "Ты помогаешь людям, которые ведут общий бюджет: соседи по квартире, семья, "
@@ -64,19 +65,20 @@ async def spending_tip(
 ) -> str | None:
     """Совет по расходам за месяц. None — если тратить пока не на чем.
 
-    Один и тот же текст за день: его показывает и вечерняя рассылка, и веб.
+    Хранится в базе и живёт TIP_TTL, поэтому и веб, и вечерняя рассылка
+    показывают один и тот же текст, а перезаход или перезапуск его не меняют.
     """
-    today = periods.to_local(dt.datetime.utcnow()).date()
-    key = (group.id, today)
-    if not refresh and key in _TIP_CACHE:
-        return _TIP_CACHE[key]
+    stored = await service.get_insight(session, group.id)
+    if not refresh and stored is not None and utcnow() - stored.created_at < TIP_TTL:
+        return stored.text
 
     tip = await _make_tip(session, group)
-    # Пустой ответ модели не кэшируем: в следующий заход может получиться.
-    if tip is not None or not settings.llm_enabled:
-        _TIP_CACHE.clear()
-        _TIP_CACHE[key] = tip
-    return tip
+    if tip:
+        await service.save_insight(session, group.id, tip)
+        return tip
+
+    # Модель промолчала или выключена: прежний совет лучше пустого места.
+    return stored.text if stored else None
 
 
 async def _make_tip(session: AsyncSession, group: Group) -> str | None:

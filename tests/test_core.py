@@ -349,6 +349,58 @@ async def accounts():
 
     print("аккаунты: приглашение, гость, привязка Telegram и Яндекса")
 
+
+
+async def stored_tip():
+    """Совет живёт в базе и не меняется при каждом заходе."""
+    import datetime as _dt
+
+    from app.core import insights
+    from app.db.base import utcnow
+
+    calls = []
+
+    async def fake_make(session_, group_):
+        calls.append(1)
+        return f"совет №{len(calls)}"
+
+    real_make, insights._make_tip = insights._make_tip, fake_make
+    try:
+        async with session_scope() as s:
+            owner = await service.get_or_create_user(s, tg_user_id=31, first_name="Хозяин")
+            g = await service.create_group(s, title="Совет", owner=owner)
+
+            first = await insights.spending_tip(s, g)
+            assert first == "совет №1", first
+
+            # Повторные заходы отдают тот же текст, к модели не обращаемся.
+            for _ in range(3):
+                assert await insights.spending_tip(s, g) == "совет №1"
+            assert len(calls) == 1, calls
+
+            # Кнопка «обновить» пересобирает принудительно.
+            assert await insights.spending_tip(s, g, refresh=True) == "совет №2"
+            assert await insights.spending_tip(s, g) == "совет №2"
+            assert len(calls) == 2, calls
+
+            # Через TIP_TTL совет обновляется сам.
+            row = await service.get_insight(s, g.id)
+            row.created_at = utcnow() - insights.TIP_TTL - _dt.timedelta(minutes=1)
+            await s.flush()
+            assert await insights.spending_tip(s, g) == "совет №3"
+
+            # Модель промолчала — показываем прежний, а не пустоту.
+            async def silent(session_, group_):
+                return None
+
+            insights._make_tip = silent
+            assert await insights.spending_tip(s, g, refresh=True) == "совет №3"
+    finally:
+        insights._make_tip = real_make
+
+    print("совет: хранится в базе, обновляется по сроку и кнопкой")
+
 asyncio.run(main())
 asyncio.run(split_mode())
 asyncio.run(accounts())
+asyncio.run(stored_tip())

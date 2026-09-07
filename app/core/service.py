@@ -22,6 +22,7 @@ from app.db.models import (
     TRANSFER,
     DailyJob,
     Group,
+    GroupInsight,
     GroupInvite,
     Membership,
     Operation,
@@ -841,6 +842,25 @@ async def consume_login_token(
     row.used_at = utcnow()
     await session.flush()
     return await session.get(User, row.user_id)
+
+
+async def get_insight(session: AsyncSession, group_id: int) -> GroupInsight | None:
+    return await session.scalar(
+        select(GroupInsight).where(GroupInsight.group_id == group_id)
+    )
+
+
+async def save_insight(session: AsyncSession, group_id: int, text: str) -> GroupInsight:
+    """Кладёт свежий совет вместо прежнего: на бюджет он всегда один."""
+    row = await get_insight(session, group_id)
+    if row is None:
+        row = GroupInsight(group_id=group_id, text=text[:1024])
+        session.add(row)
+    else:
+        row.text = text[:1024]
+        row.created_at = utcnow()
+    await session.flush()
+    return row
 
 
 # --------------------------------------------------------------------------- #

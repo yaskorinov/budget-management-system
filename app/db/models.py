@@ -188,6 +188,24 @@ class DailyJob(Base):
     sent_on: Mapped[dt.date] = mapped_column(Date)
 
 
+class GroupInsight(Base):
+    """Последний совет по расходам для бюджета.
+
+    Держим в базе, а не в памяти: иначе после каждого перезапуска человек
+    видел бы новый текст, хотя расходы те же. Один совет на бюджет — при
+    обновлении строка перезаписывается.
+    """
+
+    __tablename__ = "group_insights"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    group_id: Mapped[int] = mapped_column(
+        ForeignKey("groups.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    text: Mapped[str] = mapped_column(String(1024))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class WebLoginToken(Base):
     """Одноразовый токен: вход в веб из бота или привязка аккаунта.
 
