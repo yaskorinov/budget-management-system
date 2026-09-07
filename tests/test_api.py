@@ -166,8 +166,14 @@ with TestClient(app) as client:
     # Вход через Яндекс в тестах не настроен — и наружу это видно честно.
     assert client.get("/api/auth/yandex/url").status_code == 503
     assert client.post("/api/link/yandex", headers=hg).status_code == 503
-    assert client.get("/").status_code == 200
-    assert "Общий бюджет" in client.get("/").text
+    page = client.get("/")
+    assert page.status_code == 200
+    assert "Общий бюджет" in page.text
+    # Версия в адресах статики: без неё вебвью Telegram неделю показывает
+    # старую сборку, сколько ни деплой.
+    assert 'src="/app.js?v=' in page.text, page.text[:400]
+    assert 'href="/styles.css?v=' in page.text
+    assert page.headers["cache-control"] == "no-cache"
     assert client.get("/app.js").status_code == 200
     assert client.get("/styles.css").status_code == 200
 

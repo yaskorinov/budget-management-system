@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from aiogram.types import Update
@@ -22,6 +24,22 @@ from app.db.base import init_db
 log = logging.getLogger(__name__)
 
 WEB_DIR = BASE_DIR / "app" / "web"
+
+
+def asset_version(name: str) -> str:
+    """Короткий отпечаток файла — меняется только вместе с его содержимым."""
+    path = WEB_DIR / name
+    if not path.is_file():
+        return "0"
+    return hashlib.md5(path.read_bytes()).hexdigest()[:10]
+
+
+def versioned_index() -> str:
+    """index.html со ссылками вида /app.js?v=<отпечаток>."""
+    html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
+    for name in ("styles.css", "app.js"):
+        html = html.replace(f'"/{name}"', f'"/{name}?v={asset_version(name)}"')
+    return html
 
 
 @asynccontextmanager
@@ -126,6 +144,16 @@ def create_app() -> FastAPI:
         return {"ok": True}
 
     if WEB_DIR.is_dir():
+        # Вебвью Telegram кеширует статику мини-аппы надолго и без спроса,
+        # поэтому имена файлов сами по себе не годятся: после деплоя человек
+        # ещё сутки видит старую версию. Отдаём страницу с версией в адресах
+        # скриптов — меняется файл, меняется адрес, кеш обходится сам.
+        @app.get("/", include_in_schema=False)
+        async def index() -> HTMLResponse:
+            return HTMLResponse(
+                versioned_index(), headers={"Cache-Control": "no-cache"}
+            )
+
         app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")
 
     return app
