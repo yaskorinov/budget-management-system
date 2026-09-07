@@ -396,48 +396,58 @@ button:active { transform: scale(.96); }
   box-shadow: var(--glass-edge);
   color: #fff;
 }
-/* Перелив: под содержимым медленно дрейфуют три цветных пятна. Оттенки
-   держатся в фирменной синей гамме — голубой, индиго, бирюзовый, — поэтому
-   карточка играет светом, но не превращается в радугу. Двигаем transform:
-   это композитится на GPU, в отличие от анимации самих градиентов. */
+/* Перелив: под содержимым едет широкая градиентная лента. Цвета в ней
+   перетекают друг в друга без границ, поэтому карточка переливается целиком,
+   а не подсвечивается отдельными пятнами. Яркость по всей ленте одинаковая —
+   меняется только оттенок, поэтому нет вспышек, только перелив, как на
+   перламутре. Лента вдвое шире карточки и содержит два одинаковых периода:
+   сдвиг ровно на половину замыкает цикл, и склейки не видно. Двигаем
+   transform — это композитится на GPU. */
 .fund::before {
-  content: ""; position: absolute; inset: -18%;
-  background:
-    radial-gradient(30% 34% at 26% 32%, rgba(90, 200, 250, .72), transparent 64%),
-    radial-gradient(28% 32% at 74% 22%, rgba(128, 96, 255, .62), transparent 62%),
-    radial-gradient(32% 36% at 62% 82%, rgba(40, 214, 200, .46), transparent 66%);
-  /* Складываем со светом, а не закрашиваем: пятна дают свечение, как на
-     масляной плёнке, и синий под ними остаётся синим. */
+  /* Лента начинается от левого края и вдвое шире карточки: сдвиг на половину
+     своей ширины (= ширина карточки) оставляет её покрытой целиком, поэтому
+     край ленты никогда не заходит в кадр. */
+  content: ""; position: absolute; top: -30%; bottom: -30%; left: 0;
+  width: 200%;
+  background: linear-gradient(
+    115deg,
+    rgba(36, 122, 235, .3) 0%,
+    rgba(86, 186, 250, .3) 8%,
+    rgba(64, 150, 245, .3) 17%,
+    rgba(116, 122, 250, .3) 25%,
+    rgba(70, 178, 240, .3) 33%,
+    rgba(48, 140, 240, .3) 42%,
+    rgba(36, 122, 235, .3) 50%,
+    rgba(86, 186, 250, .3) 58%,
+    rgba(64, 150, 245, .3) 67%,
+    rgba(116, 122, 250, .3) 75%,
+    rgba(70, 178, 240, .3) 83%,
+    rgba(48, 140, 240, .3) 92%,
+    rgba(36, 122, 235, .3) 100%
+  );
+  /* Складываем со светом, а не закрашиваем: синий под лентой остаётся синим. */
   mix-blend-mode: screen;
-  animation: fundDrift 20s ease-in-out infinite alternate;
+  animation: fundFlow 20s linear infinite;
   will-change: transform;
   pointer-events: none;
 }
 
-@keyframes fundDrift {
-  0%   { transform: translate3d(-8%, -5%, 0) rotate(-10deg) scale(1.05); }
-  50%  { transform: translate3d(9%, 6%, 0) rotate(12deg) scale(1.25); }
-  100% { transform: translate3d(-4%, 8%, 0) rotate(-5deg) scale(1.1); }
+@keyframes fundFlow {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-50%, 0, 0); }
 }
 
-/* Блик сверху справа: он даёт объём линзы и ходит своим кругом, поэтому
-   пятна под ним каждый раз освещаются по-новому. */
+/* Блик сверху справа — он даёт карточке объём линзы. */
 .fund::after {
   content: ""; position: absolute; right: -70px; top: -120px;
   width: 260px; height: 260px; border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 255, 255, .3), transparent 66%);
-  animation: fundGlow 26s ease-in-out infinite alternate;
-  will-change: transform;
+  background: radial-gradient(circle, rgba(255, 255, 255, .26), transparent 66%);
   pointer-events: none;
-}
-
-@keyframes fundGlow {
-  0%   { transform: translate3d(0, 0, 0) scale(1); }
-  100% { transform: translate3d(-38%, 28%, 0) scale(1.2); }
 }
 
 /* Всё содержимое — над переливом. */
 .fund > * { position: relative; z-index: 1; }
+
 /* Мелкие подписи лежат на движущихся пятнах, поэтому им нужна опора:
    мягкая тень держит контраст, когда под текстом оказывается светлое. */
 .fund .eyebrow, .fund-foot b, .fund-value {
