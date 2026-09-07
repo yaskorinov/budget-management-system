@@ -1141,15 +1141,15 @@ function applyInsets() {
   if (top) root.setProperty('--safe-top', `${top}px`);
   if (bottom) root.setProperty('--safe-bottom', `${bottom}px`);
 
-  // Вебвью Telegram бывает выше видимой части экрана — тогда закреплённый
-  // док оказывается ниже сгиба, и до него приходится долистывать. Поднимаем
-  // его на эту разницу; в обычном браузере она нулевая.
+  // Вебвью Telegram бывает выше видимой части экрана: низ документа уходит
+  // за край, и закреплённый по нижней грани док приходится долистывать.
+  // Поэтому отдаём в CSS реальную видимую высоту — от неё считается всё,
+  // что должно оставаться на виду.
   if (!tg.isExpanded) {
     try { tg.expand(); } catch (_) { /* старый клиент */ }
   }
-  const stable = tg.viewportStableHeight || 0;
-  const gap = stable ? Math.max(0, Math.round(window.innerHeight - stable)) : 0;
-  root.setProperty('--viewport-gap', `${gap}px`);
+  const stable = tg.viewportStableHeight || tg.viewportHeight || 0;
+  if (stable) root.setProperty('--vh', `${Math.round(stable)}px`);
 }
 
 if (tg) {

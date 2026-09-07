@@ -119,9 +119,10 @@
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 
-  /* Насколько вебвью выше видимой области: в браузере ноль, в Telegram
-     бывает больше нуля — на столько приподнимаем док. */
-  --viewport-gap: 0px;
+  /* Высота видимой области. В браузере это весь экран, в Telegram — то, что
+     реально видно: вебвью там бывает выше, и низ документа уходит за край.
+     Значение подставляет app.js из viewportStableHeight. */
+  --vh: 100dvh;
 }
 
 * { box-sizing: border-box; }
@@ -306,9 +307,11 @@ button:active { transform: scale(.96); }
 
 #app {
   max-width: var(--wide); margin: 0 auto;
+  /* Снизу оставляем место под док плюс запас на невидимый низ вебвью,
+     иначе последняя карточка прячется под панелью. */
   padding: var(--safe-top) var(--pad)
            calc(var(--tabbar) + var(--dock-bottom) + 22px + var(--safe-bottom)
-                + var(--viewport-gap));
+                + max(0px, 100dvh - var(--vh)));
 }
 
 /* Парящая шапка: сплошной плашки нет, есть две стеклянные пилюли. Контент
@@ -567,7 +570,13 @@ button:active { transform: scale(.96); }
 .op.compact .op-icon .ic { width: 19px; height: 19px; }
 .op.compact .op-sum { flex: none; }
 
-.ops { display: grid; gap: 10px; }
+/* Колонки набираются от ширины контейнера, а не от ширины экрана: на
+   планшете и в десктопном Telegram строка во всю ширину превращалась
+   в полосу с пустотой посередине. */
+.ops {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+}
 .op {
   display: flex; align-items: flex-start; gap: 12px;
   border-radius: var(--r-md); padding: 12px;
@@ -743,8 +752,11 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
    капсуле ездит вторая стекляшка: она отмечает выбранную вкладку, сдвигаясь
    на ширину ячейки и слегка растягиваясь на полпути. */
 .dock {
+  /* Отсчёт от верха, а не от низа: верх вьюпорта совпадает с верхом видимой
+     области всегда, а низ — только когда вебвью не выше экрана. Именно из-за
+     привязки к низу панель уезжала за сгиб в Telegram. */
   position: fixed; left: 50%; z-index: 9;
-  bottom: calc(var(--dock-bottom) + var(--safe-bottom) + var(--viewport-gap));
+  top: calc(var(--vh) - var(--tabbar) - var(--dock-bottom) - var(--safe-bottom));
   transform: translateX(-50%);
   display: flex; align-items: center; gap: 12px;
   /* Ширина по содержимому, но не шире экрана: без width блок считался бы от
@@ -959,7 +971,7 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
 
 .toast {
   position: fixed; left: 50%; transform: translateX(-50%);
-  bottom: calc(var(--tabbar) + var(--dock-bottom) + 16px + var(--safe-bottom));
+  top: calc(var(--vh) - var(--tabbar) - var(--dock-bottom) - var(--safe-bottom) - 58px);
   z-index: 30; max-width: min(420px, calc(100% - 32px));
   border: none; border-radius: 999px;
   background: var(--glass-dense);
@@ -987,7 +999,6 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
   .home-grid .col > :first-child { margin-top: 0; }
   .home-grid .col > .section-head:first-child .section-title { margin-top: 0; }
   .balances { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
-  .ops { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
 
   .stats-grid {
     display: grid; grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
@@ -1000,10 +1011,6 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
   .fund-value { font-size: 46px; }
 
   .tabbar { grid-template-columns: repeat(3, minmax(0, 96px)); }
-}
-
-@media (min-width: 1200px) {
-  .ops { grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); }
 }
 
 @media (prefers-reduced-motion: reduce) {

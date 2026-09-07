@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import texts
 from app.config import BASE_DIR, settings
 from app.core import service
+from app.core.assets import asset_version
 from app.db.models import Group, User
 
 log = logging.getLogger(__name__)
@@ -29,9 +30,15 @@ GROUP_CHATS = {"group", "supergroup"}
 
 
 def web_app_url(user_token: str | None = None) -> str | None:
+    """Адрес мини-аппы с версией сборки.
+
+    Вебвью Telegram кеширует страницу по адресу и после выкладки ещё долго
+    открывает прежнюю. Версия в адресе меняется вместе с файлами, поэтому
+    новая сборка подхватывается без чистки кеша.
+    """
     if not settings.web_enabled:
         return None
-    return f"{settings.public_base}/?src=tg"
+    return f"{settings.public_base}/?src=tg&v={asset_version('app.js')}"
 
 
 async def sync_chat_admins(bot: Bot, session: AsyncSession, group, chat_id: int) -> None:

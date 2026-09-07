@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import hashlib
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -19,27 +18,12 @@ from app.api.routes import charts_router, oauth_router, router
 from app.bot.bot import create_bot, create_dispatcher, setup_bot_commands
 from app.bot.scheduler import daily_loop
 from app.config import BASE_DIR, proxy_warning, settings
+from app.core.assets import versioned_index
 from app.db.base import init_db
 
 log = logging.getLogger(__name__)
 
 WEB_DIR = BASE_DIR / "app" / "web"
-
-
-def asset_version(name: str) -> str:
-    """Короткий отпечаток файла — меняется только вместе с его содержимым."""
-    path = WEB_DIR / name
-    if not path.is_file():
-        return "0"
-    return hashlib.md5(path.read_bytes()).hexdigest()[:10]
-
-
-def versioned_index() -> str:
-    """index.html со ссылками вида /app.js?v=<отпечаток>."""
-    html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
-    for name in ("styles.css", "app.js"):
-        html = html.replace(f'"/{name}"', f'"/{name}?v={asset_version(name)}"')
-    return html
 
 
 @asynccontextmanager
