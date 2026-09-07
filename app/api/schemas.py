@@ -10,6 +10,13 @@ class TelegramAuthIn(BaseModel):
     init_data: str
 
 
+class GroupIn(BaseModel):
+    """Создание бюджета прямо из приложения, без похода в бота."""
+
+    title: str = Field(min_length=1, max_length=255)
+    mode: str = Field(default="fund", pattern="^(fund|split)$")
+
+
 class InviteAcceptIn(BaseModel):
     token: str
     name: str | None = None

@@ -153,6 +153,20 @@ async def categories_list():
 # --------------------------------------------------------------------------- #
 
 
+@router.post("/groups", response_model=schemas.AuthOut, status_code=status.HTTP_201_CREATED)
+async def create_group(
+    payload: schemas.GroupIn,
+    user: User = Depends(current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Новый бюджет из веба: человек сразу становится его владельцем."""
+    group = await service.create_group(
+        session, title=payload.title.strip(), owner=user, mode=payload.mode
+    )
+    await service.set_active_group(session, user, group.id)
+    return await _auth_payload(session, user)
+
+
 @router.get("/groups/{group_id}/summary", response_model=schemas.SummaryOut)
 async def group_summary(
     group_id: int,

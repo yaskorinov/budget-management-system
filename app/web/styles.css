@@ -281,7 +281,8 @@ button:active { transform: scale(.96); }
   padding: 1px 9px; font-weight: 600;
 }
 
-#invite-form { margin-top: 18px; }
+#invite-form, #new-form { margin-top: 18px; }
+#new-form .segmented { margin-bottom: 4px; }
 .auth-card .field { margin-bottom: 12px; }
 .auth-card .field input { background: var(--sunk); }
 

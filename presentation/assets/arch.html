@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --ink: #ffffff;
+    --ink-2: rgba(235, 235, 245, .72);
+    --blue: #0a84ff;
+    --ai: #ffd60a;
+    --edge: rgba(255, 255, 255, .14);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    width: 1400px; height: 620px;
+    background: #071411;
+    color: var(--ink);
+    font: 400 17px/1.35 "Segoe UI", -apple-system, system-ui, sans-serif;
+    padding: 26px 34px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .row { display: flex; gap: 18px; align-items: stretch; }
+  .col { display: flex; flex-direction: column; gap: 14px; flex: 1; }
+
+  .band { font-size: 14px; letter-spacing: .16em; text-transform: uppercase;
+          color: var(--ink-2); margin-bottom: 4px; }
+
+  .box {
+    border: 1.5px solid var(--edge); border-radius: 18px;
+    background: rgba(255, 255, 255, .05);
+    padding: 16px 18px; flex: 1;
+  }
+  .box b { display: block; font-size: 20px; margin-bottom: 6px; }
+  .box span { color: var(--ink-2); font-size: 15px; }
+
+  .clients .box { text-align: center; }
+  .clients .box b { font-size: 21px; }
+
+  .core {
+    border: 1.5px solid rgba(10, 132, 255, .55);
+    background: rgba(10, 132, 255, .12);
+    border-radius: 20px; padding: 18px 20px;
+  }
+  .core-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+  .core-head b { font-size: 23px; }
+  .core-head span { color: var(--ink-2); font-size: 15px; }
+  .chips { display: flex; gap: 10px; flex-wrap: wrap; }
+  .chip {
+    border: 1px solid var(--edge); border-radius: 999px;
+    padding: 7px 15px; font-size: 15px; background: rgba(255, 255, 255, .05);
+  }
+
+  /* Блок ИИ выделен: этого прямо требует кейс. */
+  .ai {
+    border: 2px solid var(--ai);
+    background: rgba(255, 214, 10, .12);
+    border-radius: 20px; padding: 18px 20px;
+  }
+  .ai .core-head b { color: var(--ai); }
+  .ai .chip { border-color: rgba(255, 214, 10, .5); background: rgba(255, 214, 10, .1); }
+
+  .arrow { text-align: center; color: var(--ink-2); font-size: 22px; line-height: 1; }
+
+  .store { display: flex; gap: 18px; }
+  .store .box { text-align: center; }
+
+  .foot { color: var(--ink-2); font-size: 15px; text-align: center; }
+  .foot b { color: var(--ink); }
+</style>
+</head>
+<body>
+
+  <div>
+    <div class="band">Клиенты — один и тот же сценарий в трёх местах</div>
+    <div class="row clients">
+      <div class="box"><b>Telegram-бот</b><span>команды, инлайн, голос</span></div>
+      <div class="box"><b>Мини-аппа</b><span>внутри Telegram</span></div>
+      <div class="box"><b>Браузер</b><span>без Telegram, вход по ссылке или Яндекс ID</span></div>
+    </div>
+  </div>
+
+  <div class="arrow">↓ &nbsp; HTTPS · один процесс: бот и веб в общем событийном цикле &nbsp; ↓</div>
+
+  <div class="core">
+    <div class="core-head"><b>Ядро расчётов</b><span>FastAPI + aiogram 3 · Python 3.12</span></div>
+    <div class="chips">
+      <span class="chip">Балансы участников</span>
+      <span class="chip">Взаимозачёт долгов</span>
+      <span class="chip">Два режима: касса / дележ</span>
+      <span class="chip">Доли по копейке</span>
+      <span class="chip">REST для веба</span>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col" style="flex: 1.35">
+      <div class="ai">
+        <div class="core-head"><b>★ AI-модуль</b><span>Gemini 3.1 Flash Lite через OpenAI-совместимый API</span></div>
+        <div class="chips">
+          <span class="chip">Категоризация покупок</span>
+          <span class="chip">Советы по оптимизации</span>
+          <span class="chip">Напоминания о долгах</span>
+          <span class="chip">Голос → операция (STT)</span>
+        </div>
+        <div style="margin-top: 12px; color: var(--ink-2); font-size: 15px;">
+          Цифры считаем сами и отдаём модели готовыми — она отвечает только за формулировку.
+          Отказ API не ломает сценарий: категория определяется словарём.
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="box">
+        <b>Данные</b>
+        <span>SQLite + SQLAlchemy 2.0 async · суммы в копейках ·
+              бюджеты, операции, доли, приглашения, советы</span>
+      </div>
+      <div class="box">
+        <b>Инфраструктура</b>
+        <span>Docker · nginx + HTTPS · SOCKS5-прокси для исходящих ·
+              Debian VPS</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    Вайб-кодинг: <b>Claude Code</b> — генерация модулей, разбор ошибок, автотесты и вёрстка мини-аппы
+  </div>
+
+</body>
+</html>

@@ -130,6 +130,17 @@ with TestClient(app) as client:
         "перевод без получателя недопустим"
 
 
+    # Бюджет заводится прямо из приложения: жюри и новым людям не нужно
+    # искать ссылку-приглашение в боте.
+    r = client.post("/api/groups", headers=h,
+                    json={"title": "Из веба", "mode": "split"})
+    assert r.status_code == 201, r.text
+    fresh = r.json()
+    assert any(g["title"] == "Из веба" and g["mode"] == "split" for g in fresh["groups"])
+    assert fresh["active_group_id"] == next(
+        g["id"] for g in fresh["groups"] if g["title"] == "Из веба")
+    assert client.post("/api/groups", json={"title": "Чужой"}).status_code == 401,         "без входа бюджет не создать"
+
     # ------------------------------------- приглашение и вход без Telegram --
     inv = client.post(f"/api/groups/{gid}/invite", headers=h).json()
     token = inv["url"].split("invite=")[1]

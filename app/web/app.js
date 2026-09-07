@@ -200,7 +200,13 @@ async function enter(payload) {
   state.groupId = payload.active_group_id || (payload.groups[0] && payload.groups[0].id);
 
   if (!state.groupId) {
-    showAuth('У вас пока нет общего бюджета. Создайте его в боте: /newgroup Название');
+    // Бюджета нет — заводим прямо здесь, без похода в бота за ссылкой.
+    showAuth('У вас пока нет общего бюджета');
+    $('auth-hint').textContent =
+      'Заведите свой — или попросите ссылку-приглашение у того, кто уже ведёт бюджет.';
+    $('new-form').hidden = false;
+    $('invite-form').hidden = true;
+    syncSegments();
     return;
   }
 
@@ -250,6 +256,34 @@ async function joinByInvite(token) {
   };
   return null;
 }
+
+$('new-go').onclick = async () => {
+  const title = $('new-title').value.trim();
+  if (!title) return toast('Придумайте название');
+
+  const active = document.querySelector('#new-mode .seg-btn.active');
+  $('new-go').disabled = true;
+  try {
+    const payload = await api('/groups', {
+      method: 'POST',
+      body: JSON.stringify({ title, mode: active ? active.dataset.newmode : 'fund' }),
+    });
+    $('new-form').hidden = true;
+    await enter(payload);
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    $('new-go').disabled = false;
+  }
+};
+
+document.querySelectorAll('#new-mode .seg-btn').forEach((button) => {
+  button.onclick = () => {
+    document.querySelectorAll('#new-mode .seg-btn').forEach((other) =>
+      other.classList.toggle('active', other === button));
+    positionThumb($('new-mode'));
+  };
+});
 
 // Кнопка появляется, только если вход через Яндекс настроен на сервере.
 async function offerYandex(invite) {

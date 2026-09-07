@@ -62,6 +62,22 @@
       <button type="button" id="invite-go" class="primary-btn">Войти в бюджет</button>
     </div>
 
+    <!-- Первый вход без приглашения: бюджет заводится прямо здесь -->
+    <div id="new-form" hidden>
+      <label class="field">
+        <span class="eyebrow">Название бюджета</span>
+        <input id="new-title" type="text" placeholder="Квартира на Ленина" maxlength="60">
+      </label>
+      <div class="field">
+        <span class="eyebrow">Как считаем деньги</span>
+        <div class="segmented equal" id="new-mode" data-ready="1">
+          <button type="button" class="seg-btn active" data-newmode="fund">Общая касса</button>
+          <button type="button" class="seg-btn" data-newmode="split">Делим расходы</button>
+        </div>
+      </div>
+      <button type="button" id="new-go" class="primary-btn">Создать бюджет</button>
+    </div>
+
     <button type="button" id="yandex-login" class="ya-btn" hidden>
       <span class="ya-logo">Я</span>Войти с Яндекс ID
     </button>
