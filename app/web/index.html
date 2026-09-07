@@ -241,6 +241,40 @@
   </div>
 </div>
 
+<!-- ------------------------------------------------------- новый бюджет -->
+<div id="group-sheet" class="sheet" hidden>
+  <div class="sheet-backdrop" data-close></div>
+  <div class="sheet-card">
+    <div class="sheet-grip"></div>
+    <div class="sheet-head">
+      <h2>Новый бюджет</h2>
+      <button type="button" class="icon-btn" data-close aria-label="Закрыть">
+        <svg class="ic ic-20"><use href="#i-close"/></svg>
+      </button>
+    </div>
+
+    <div class="sheet-body">
+      <label class="field">
+        <span class="eyebrow">Название</span>
+        <input id="gs-title" type="text" placeholder="Поездка в Казань" maxlength="60">
+      </label>
+      <div class="field">
+        <span class="eyebrow">Как считаем деньги</span>
+        <div class="segmented equal" id="gs-mode" data-ready="1">
+          <button type="button" class="seg-btn active" data-newmode="fund">Общая касса</button>
+          <button type="button" class="seg-btn" data-newmode="split">Делим расходы</button>
+        </div>
+      </div>
+      <p class="sheet-note">Прежний бюджет останется на месте — переключаться между ними
+        можно вверху экрана.</p>
+    </div>
+
+    <div class="sheet-foot">
+      <button type="button" id="gs-go" class="primary-btn">Создать бюджет</button>
+    </div>
+  </div>
+</div>
+
 <!-- ----------------------------------------------------- форма операции -->
 <div id="sheet" class="sheet" hidden>
   <div class="sheet-backdrop" data-close></div>

@@ -310,8 +310,14 @@ async function bootstrap() {
     option.value = group.id;
     select.appendChild(option);
   });
+  // Последней строкой — создание: список бюджетов и есть то место, где
+  // человек о них думает. Список из одного бюджета больше не блокируем,
+  // иначе до этой строки не добраться.
+  const add = el('option', null, '+ Новый бюджет');
+  add.value = 'new';
+  select.appendChild(add);
   select.value = String(state.groupId);
-  select.disabled = state.groups.length < 2;
+  select.disabled = false;
   updateGroupName();
 
   state.categories = await api('/categories');
@@ -742,25 +748,34 @@ function updateKindFields() {
   positionThumb($('kind-switch'));
 }
 
-function openSheet() {
-  $('sheet').hidden = false;
+// Шторок две — операция и новый бюджет, — но открытой всегда одна: они
+// перекрывают друг друга, и системная кнопка «назад» у них общая.
+let openedSheet = null;
+const backClose = () => closeSheet();
+
+function openSheet(sheet = $('sheet')) {
+  openedSheet = sheet;
+  sheet.hidden = false;
   document.body.style.overflow = 'hidden';
-  positionThumb($('kind-switch'));
+  // Бегунок переключателя считается по месту на экране, поэтому ставим его
+  // после того, как шторка стала видимой.
+  positionThumb(sheet.id === 'sheet' ? $('kind-switch') : $('gs-mode'));
   try {
     if (tg && tg.BackButton) {
       tg.BackButton.show();
-      tg.BackButton.onClick(closeSheet);
+      tg.BackButton.onClick(backClose);
     }
   } catch (_) { /* нет BackButton — закрываем крестиком */ }
 }
 
 function closeSheet() {
-  const sheet = $('sheet');
-  if (sheet.hidden || sheet.classList.contains('closing')) return;
+  const sheet = openedSheet;
+  if (!sheet || sheet.hidden || sheet.classList.contains('closing')) return;
+  openedSheet = null;
 
   try {
     if (tg && tg.BackButton) {
-      tg.BackButton.offClick(closeSheet);
+      tg.BackButton.offClick(backClose);
       tg.BackButton.hide();
     }
   } catch (_) { /* см. выше */ }
@@ -773,7 +788,7 @@ function closeSheet() {
     sheet.classList.remove('closing');
     sheet.hidden = true;
     document.body.style.overflow = '';
-    resetForm();
+    if (sheet.id === 'sheet') resetForm();
   }, 220);
 }
 
@@ -1260,7 +1275,7 @@ document.querySelectorAll('[data-goto]').forEach((button) => {
   button.onclick = () => switchTab(button.dataset.goto);
 });
 document.querySelectorAll('[data-close]').forEach((button) => {
-  button.onclick = closeSheet;
+  button.onclick = () => closeSheet();
 });
 
 bindGroup('kind-switch', 'kind', updateKindFields);
@@ -1273,6 +1288,37 @@ $('op-form').onsubmit = submitForm;
 $('cancel-edit').onclick = resetForm;
 $('parse-btn').onclick = parseWithLLM;
 $('mic-btn').onclick = toggleVoice;
+
+$('gs-go').onclick = async () => {
+  const title = $('gs-title').value.trim();
+  if (!title) return toast('Придумайте название');
+
+  const active = document.querySelector('#gs-mode .seg-btn.active');
+  $('gs-go').disabled = true;
+  try {
+    const payload = await api('/groups', {
+      method: 'POST',
+      body: JSON.stringify({ title, mode: active ? active.dataset.newmode : 'fund' }),
+    });
+    closeSheet();
+    // Новый бюджет сразу становится активным — перерисовываем приложение
+    // под него целиком, как после входа.
+    await enter(payload);
+    toast('Бюджет создан');
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    $('gs-go').disabled = false;
+  }
+};
+
+document.querySelectorAll('#gs-mode .seg-btn').forEach((button) => {
+  button.onclick = () => {
+    document.querySelectorAll('#gs-mode .seg-btn').forEach((other) =>
+      other.classList.toggle('active', other === button));
+    positionThumb($('gs-mode'));
+  };
+});
 $('reload').onclick = () => refresh().then(() => toast('Обновлено')).catch(() => {});
 
 $('raw-text').addEventListener('keydown', (event) => {
@@ -1283,6 +1329,14 @@ $('raw-text').addEventListener('keydown', (event) => {
 });
 
 $('group-select').onchange = async (event) => {
+  if (event.target.value === 'new') {
+    // Выбор — не переключение: возвращаем список к текущему бюджету, пока
+    // новый не создан.
+    event.target.value = String(state.groupId);
+    $('gs-title').value = '';
+    openSheet($('group-sheet'));
+    return;
+  }
   state.groupId = Number(event.target.value);
   state.participants = new Set();
   updateGroupName();
@@ -1374,7 +1428,7 @@ $('invite-copy').onclick = async () => {
 };
 
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && !$('sheet').hidden) closeSheet();
+  if (event.key === 'Escape' && openedSheet) closeSheet();
 });
 
 // Telegram знает про чёлку и полоску жеста больше, чем env(safe-area-*):

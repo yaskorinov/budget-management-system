@@ -174,6 +174,23 @@ with TestClient(app) as client:
     link = client.post("/api/link/telegram", headers=hg).json()
     assert link["code"], link
 
+    # Второй бюджет: заводится у того, кто уже состоит в другом, становится
+    # активным, а прежний остаётся на месте — из веба так переключаются между
+    # квартирой и поездкой.
+    before = client.get("/api/me", headers=h).json()
+    again = client.post(
+        "/api/groups", headers=h, json={"title": "Поездка в Казань", "mode": "split"}
+    )
+    assert again.status_code == 201, again.text
+    made = again.json()
+    assert len(made["groups"]) == len(before["groups"]) + 1
+    fresh = next(g for g in made["groups"] if g["title"] == "Поездка в Казань")
+    assert made["active_group_id"] == fresh["id"], "новый бюджет сразу активный"
+    assert {g["id"] for g in before["groups"]} < {g["id"] for g in made["groups"]}, \
+        "прежние бюджеты никуда не делись"
+    assert client.get(f"/api/groups/{fresh['id']}/summary", headers=h).json()["mode"] \
+        == "split"
+
     # Запись голосом: без ключа модели эндпоинт честно говорит, что выключен,
     # а пустое тело не должно уходить в распознавание.
     assert client.post("/api/voice", content=b"", headers=h).status_code == 503
