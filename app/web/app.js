@@ -1086,7 +1086,9 @@ function wavBlob(samples, rate) {
 //  Статистика
 // --------------------------------------------------------------------------- //
 
-const RING = { r: 74, width: 26, gap: 3.5 };
+// dot — самый тонкий след, который ещё видно: до него ужимается сектор,
+// не помещающийся в свою дугу во всю толщину кольца.
+const RING = { r: 74, width: 26, gap: 3.5, dot: 7 };
 
 async function loadStats() {
   state.stats = await api(
@@ -1137,19 +1139,27 @@ function drawDonut() {
   let offset = 0;
   stats.slices.forEach((slice, index) => {
     const length = (slice.value / stats.total) * circumference;
-    // Скруглённые концы добавляют половину толщины с каждой стороны — на узком
-    // секторе это превращает полоску в кружок, поэтому там концы прямые.
     const gap = solo ? 0 : RING.gap;
-    const rounded = !solo && length - gap > RING.width * 1.2;
-    const drawn = Math.max(length - gap - (rounded ? RING.width : 0), 0.6);
+
+    // Скруглённые концы съедают по половине толщины с каждой стороны, поэтому
+    // в узкую дугу сектор во всю толщину не помещается. Раньше он получал
+    // прямые концы и выбивался из ряда; теперь ему уменьшается толщина —
+    // след остаётся скруглённым, просто тоньше, вплоть до аккуратной точки.
+    const available = Math.max(length - gap, 0);
+    const width = solo
+      ? RING.width
+      : Math.min(RING.width, Math.max(available, RING.dot));
+    // Длина без концов: вместе со скруглениями сектор занимает ровно свою дугу.
+    const drawn = solo ? circumference : Math.max(available - width, 0.01);
 
     const arc = ring('seg-arc');
     arc.setAttribute('stroke', slice.color);
-    arc.setAttribute('stroke-linecap', rounded ? 'round' : 'butt');
+    arc.setAttribute('stroke-width', String(width));
+    arc.setAttribute('stroke-linecap', solo ? 'butt' : 'round');
     arc.style.strokeDasharray = `0 ${circumference}`;
     arc.style.transitionDelay = `${index * 45}ms`;
     arc.setAttribute('transform',
-      `rotate(${((offset + gap / 2 + (rounded ? RING.width / 2 : 0)) / circumference) * 360 - 90} 100 100)`);
+      `rotate(${((offset + gap / 2 + (solo ? 0 : width / 2)) / circumference) * 360 - 90} 100 100)`);
     arc.dataset.index = String(index);
     arc.addEventListener('click', () => pickSlice(index));
     svg.appendChild(arc);
