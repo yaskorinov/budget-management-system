@@ -921,9 +921,13 @@ figcaption { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); }
 
 /* Поля покупки не пропадают рывком: строка грида уезжает в ноль, поэтому
    высота шторки меняется плавно. */
+/* Поля появляются и исчезают целиком, без анимации высоты: анимировать её
+   значит пересчитывать раскладку на каждом кадре, а переключение вида
+   операции от этого заметно дёргалось. Плавность даёт прозрачность, а
+   скачок высоты гасит сдвиг самой шторки — см. resizeSheet в app.js. */
 .collapse {
   display: grid; grid-template-rows: 0fr; opacity: 0;
-  transition: grid-template-rows var(--spring), opacity var(--spring-fast);
+  transition: opacity var(--spring-fast);
 }
 .collapse > * { overflow: hidden; min-height: 0; }
 .collapse.open { grid-template-rows: 1fr; opacity: 1; }

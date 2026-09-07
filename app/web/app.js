@@ -651,12 +651,44 @@ function renderParticipants() {
   });
 }
 
+// Смена полей меняет высоту шторки. Анимировать высоту дорого: браузер
+// пересчитывает раскладку каждый кадр. Поэтому высоту меняем разом, а скачок
+// гасим сдвигом шторки — он считается на видеокарте. Приём известен как FLIP:
+// запомнили «до», применили изменение, стартовали от разницы к нулю.
+function resizeSheet(mutate) {
+  const sheet = $('sheet');
+  const card = document.querySelector('.sheet-card');
+  const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  if (!card || sheet.hidden || still) {
+    mutate();
+    return;
+  }
+
+  const before = card.getBoundingClientRect().height;
+  mutate();
+  // Шторка прижата к низу, поэтому её верх смещается ровно на разницу высот.
+  // Стартуем с этого смещения и едем к нулю — визуально верх стоит на месте
+  // и плавно приходит на новое.
+  const delta = card.getBoundingClientRect().height - before;
+  if (Math.abs(delta) < 1) return;
+
+  card.animate(
+    [{ transform: `translateY(${delta}px)` }, { transform: 'translateY(0)' }],
+    { duration: 300, easing: 'cubic-bezier(.16, 1, .3, 1)' },
+  );
+}
+
 function updateKindFields() {
   const purchase = state.kind === 'purchase';
   const transfer = state.kind === 'transfer';
-  $('purchase-fields').classList.toggle('open', purchase);
-  $('purchase-details').classList.toggle('open', purchase);
-  $('payee-field').classList.toggle('open', transfer);
+
+  resizeSheet(() => {
+    $('purchase-fields').classList.toggle('open', purchase);
+    $('purchase-details').classList.toggle('open', purchase);
+    $('payee-field').classList.toggle('open', transfer);
+  });
+
   $('submit').textContent = state.editing
     ? 'Сохранить изменения'
     : purchase ? 'Записать покупку'
