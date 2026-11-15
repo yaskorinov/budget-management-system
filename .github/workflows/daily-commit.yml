@@ -1,0 +1,30 @@
+name: Daily commit
+
+on:
+  schedule:
+    - cron: "17 9 * * *"   # every day at 09:17 UTC
+  workflow_dispatch:        # allows manual run from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Append one letter to daily.txt
+        run: |
+          touch daily.txt
+          letters=abcdefghijklmnopqrstuvwxyz
+          n=$(wc -c < daily.txt | tr -d ' ')
+          printf '%s' "${letters:$((n % 26)):1}" >> daily.txt
+
+      - name: Commit and push
+        run: |
+          git config user.name "yaskorinov"
+          git config user.email "yaskorinov@gmail.com"
+          git add daily.txt
+          git commit -m "Daily update $(date -u +%F)"
+          git push
